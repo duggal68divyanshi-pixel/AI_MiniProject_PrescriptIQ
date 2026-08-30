@@ -1,0 +1,41 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.4
+pydantic-settings==2.7.1
+asyncpg==0.30.0
+PyMuPDF==1.25.1
+sentence-transformers==3.3.1
+anthropic==0.42.0
+openai==1.58.1
+
+# --- Phase 3: Scientific Knowledge Extraction ---
+# Fuzzy gazetteer matching for scientific entity extraction (MIT license,
+# pure C++ core, no model download).
+rapidfuzz==3.11.0
+# Embedding-based keyphrase extraction; reuses the sentence-transformers
+# model already loaded above (MIT license).
+keybert==0.8.5
+# Topic discovery over project corpora (MIT license). Pulls in umap-learn
+# and hdbscan as transitive dependencies.
+bertopic==0.16.4
+# Optional: noun-chunk candidate generation for entities outside the
+# curated gazetteer. Only en_core_web_sm needs a one-time `python -m
+# spacy download en_core_web_sm` (or pip install the wheel URL — see
+# README "Model download / setup"). If not installed, Phase 3 simply
+# skips this optional pass and gazetteer matching still works fully.
+spacy==3.8.2
+
+# --- Phase 3: Scientific Knowledge Extraction ---
+# All four are pure-Python/CPU-friendly and reuse the sentence-transformers
+# model already required above wherever possible (see README §32 for
+# exact model names, sizes, and how to disable any of them).
+rapidfuzz==3.11.0        # scientific entity gazetteer fuzzy matching
+keybert==0.8.5           # keyphrase extraction (uses the shared embedding model)
+bertopic==0.16.4         # topic discovery (uses the shared embedding model)
+umap-learn==0.5.7        # BERTopic dependency (dimensionality reduction)
+hdbscan==0.8.40           # BERTopic dependency (clustering)
+
+# Optional: only needed if ENABLE_SPACY_CANDIDATES=true (see .env.example).
+# The model itself is a separate download — see README §32.
+spacy==3.8.3

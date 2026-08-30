@@ -1,0 +1,144 @@
+import { useState } from "react";
+import { getLiteratureMatrix } from "../../../services/api.js";
+
+const COLUMNS = [
+  ["research_problem", "Problem"],
+  ["methodology", "Methodology"],
+  ["model_or_algorithm", "Model / Algorithm"],
+  ["dataset", "Dataset"],
+  ["evaluation_metrics", "Evaluation Metrics"],
+  ["key_results", "Key Results"],
+  ["contributions", "Contributions"],
+  ["limitations", "Limitations"],
+];
+
+export default function MatrixTab({ projectId, indexedDocuments }) {
+  const [matrix, setMatrix] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [expanded, setExpanded] = useState(null); // documentId whose row is expanded
+
+  async function load(forceRefresh = false) {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getLiteratureMatrix(projectId, forceRefresh);
+      setMatrix(result);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="px-8 py-8">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-display text-xl text-ink">Literature Review Matrix</p>
+          <p className="mt-1 text-sm text-muted">
+            Structured findings extracted from every indexed paper, generated on demand.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => load(false)}
+            disabled={loading || indexedDocuments.length === 0}
+            className="rounded-md bg-pine-600 px-4 py-2 text-sm font-medium text-paper hover:bg-pine-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Generating…" : matrix ? "Refresh" : "Generate Matrix"}
+          </button>
+          {matrix && (
+            <button
+              onClick={() => load(true)}
+              disabled={loading}
+              className="rounded-md border border-line px-4 py-2 text-sm text-ink hover:border-pine-400"
+            >
+              Force re-analyze
+            </button>
+          )}
+        </div>
+      </div>
+
+      {indexedDocuments.length === 0 && (
+        <p className="mt-6 text-sm text-muted">No indexed papers in this project yet.</p>
+      )}
+
+      {error && (
+        <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {error}
+        </div>
+      )}
+
+      {loading && !matrix && (
+        <p className="mt-6 text-sm text-muted">
+          Extracting structured findings for each paper — this runs a grounded retrieval + extraction pass per paper and can take a moment…
+        </p>
+      )}
+
+      {matrix && matrix.rows.length > 0 && (
+        <div className="mt-6 overflow-x-auto rounded-md border border-line">
+          <table className="min-w-[1400px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-line bg-pine-50">
+                <th className="sticky left-0 z-10 bg-pine-50 px-4 py-2.5 font-mono text-[11px] uppercase tracking-wide text-pine-800">
+                  Paper
+                </th>
+                {COLUMNS.map(([key, label]) => (
+                  <th
+                    key={key}
+                    className="min-w-[200px] px-4 py-2.5 font-mono text-[11px] uppercase tracking-wide text-pine-800"
+                  >
+                    {label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {matrix.rows.map((row) => {
+                const isExpanded = expanded === row.document_id;
+                return (
+                  <tr key={row.document_id} className="border-b border-line align-top">
+                    <td className="sticky left-0 z-10 max-w-[220px] bg-white px-4 py-3">
+                      <p className="font-medium text-ink">{row.title || row.filename}</p>
+                      {row.authors?.length > 0 && (
+                        <p className="mt-0.5 text-xs text-muted">{row.authors.join(", ")}</p>
+                      )}
+                      {row.publication_year && (
+                        <p className="text-xs text-muted">{row.publication_year}</p>
+                      )}
+                      <button
+                        onClick={() => setExpanded(isExpanded ? null : row.document_id)}
+                        className="mt-1 font-mono text-[11px] uppercase text-pine-700 hover:underline"
+                      >
+                        {isExpanded ? "Collapse" : "Expand"}
+                      </button>
+                    </td>
+                    {COLUMNS.map(([key]) => (
+                      <td key={key} className="max-w-[280px] px-4 py-3 text-ink">
+                        <p className={isExpanded ? "" : "line-clamp-3"}>{row[key]}</p>
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {matrix && matrix.skipped.length > 0 && (
+        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="font-mono text-[11px] uppercase tracking-wide text-amber-800">
+            {matrix.skipped.length} paper(s) could not be analyzed
+          </p>
+          {matrix.skipped.map((s) => (
+            <p key={s.document_id} className="mt-1 text-xs text-amber-800">
+              {s.document_id}: {s.reason}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: #fbf9f3;
+  color: #1b211f;
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+::selection {
+  background-color: #d3e3dc;
+}
+
+/* subtle focus ring that's still visible against the paper background */
+:focus-visible {
+  outline: 2px solid #2f6f5e;
+  outline-offset: 2px;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: #ded8c8;
+  border-radius: 999px;
+}
