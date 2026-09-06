@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     llm_provider: str = "anthropic"
     llm_api_key: str = ""
     llm_model: str = "claude-sonnet-4-6"
+    llm_base_url: str = ""
     llm_max_tokens: int = 1024
 
     # --- Chunking ---
@@ -81,7 +82,14 @@ class Settings(BaseSettings):
     max_claim_candidates_per_document: int = 12
     max_limitation_candidates_per_document: int = 10
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
+
+    @property
+    def resolved_embedding_dimension(self) -> int:
+        name_lower = self.embedding_model_name.lower()
+        if "scibert" in name_lower or "specter" in name_lower:
+            return 768 if self.embedding_dimension == 384 else self.embedding_dimension
+        return self.embedding_dimension
 
     @property
     def resolved_keyphrase_model_name(self) -> str:

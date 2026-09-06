@@ -1,11 +1,39 @@
-import { useState } from "react";
-import { askProjectQuestion } from "../../../services/api.js";
+import { useState, useEffect } from "react";
+import { askProjectQuestion, getProjectChatHistory } from "../../../services/api.js";
 import SourceReferences from "../../SourceReferences.jsx";
 
 export default function AssistantTab({ projectId, indexedDocuments }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [asking, setAsking] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    async function loadHistory() {
+      if (!projectId) return;
+      try {
+        const history = await getProjectChatHistory(projectId);
+        if (active && Array.isArray(history) && history.length > 0) {
+          const loaded = [];
+          for (const item of history) {
+            loaded.push({ role: "user", text: item.question });
+            loaded.push({
+              role: "assistant",
+              text: item.answer,
+              sources: item.sources || [],
+              papersCited: [...new Set((item.sources || []).map((s) => s.document))],
+              grounded: (item.sources || []).length > 0,
+            });
+          }
+          setMessages(loaded);
+        }
+      } catch {
+        // No history saved yet
+      }
+    }
+    loadHistory();
+    return () => { active = false; };
+  }, [projectId]);
 
   async function handleAsk(e) {
     e.preventDefault();

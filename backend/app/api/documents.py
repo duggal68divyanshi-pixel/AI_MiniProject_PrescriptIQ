@@ -85,3 +85,22 @@ async def reprocess_document(document_id: UUID, background_tasks: BackgroundTask
     file_bytes = stored.read_bytes()
     background_tasks.add_task(process_document, document_id, file_bytes, row["filename"])
     return DocumentOut(**row)
+
+
+@router.get("/{document_id}/citation")
+async def get_document_citation(document_id: UUID):
+    """Get formatted citations (APA, IEEE, MLA, Chicago, BibTeX, RIS) for a paper."""
+    from app.services.citations import get_all_citations
+    from app.services.metadata_repository import get_metadata
+
+    doc = await repo.get_document(document_id)
+    meta = await get_metadata(document_id) or {}
+    paper_dict = {
+        "title": meta.get("title") or doc.get("title") or doc.get("filename"),
+        "authors": meta.get("authors") or [],
+        "publication_year": meta.get("publication_year"),
+        "venue": meta.get("venue"),
+        "doi": meta.get("doi"),
+        "abstract": meta.get("abstract"),
+    }
+    return get_all_citations(paper_dict)

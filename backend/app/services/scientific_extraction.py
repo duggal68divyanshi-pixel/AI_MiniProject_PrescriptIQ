@@ -27,6 +27,7 @@ from uuid import UUID
 from app.core.exceptions import DocumentNotIndexedError
 from app.models.schemas import DocumentStatus
 from app.services import document_repository as doc_repo
+from app.services import metadata_repository as meta_repo
 from app.services import scientific_repository as sci_repo
 from app.services.ml import claim_extraction, entity_extraction, keyphrase, section_classifier
 
@@ -72,9 +73,20 @@ async def run_paper_intelligence(document_id: UUID, job_id: UUID | None = None) 
 
     chunk_rows = await doc_repo.get_all_chunks(document_id)
     if not chunk_rows:
-        raise DocumentNotIndexedError(f"Document '{document['filename']}' has no chunks to analyze.")
+        metadata = await meta_repo.get_metadata(document_id)
+        fallback_text = (metadata or {}).get("abstract") or (metadata or {}).get("title") or document.get("title") or document.get("filename")
+        if fallback_text and fallback_text.strip():
+            chunk_rows = [{
+                "chunk_index": 0,
+                "content": fallback_text,
+                "page_number": 1,
+                "id": None,
+            }]
+        else:
+            raise DocumentNotIndexedError(f"Document '{document['filename']}' has no chunks or abstract text to analyze.")
+
     chunks = [
-        _ChunkView(chunk_index=r["chunk_index"], text=r["content"], page_number=r["page_number"], id=r["id"])
+        _ChunkView(chunk_index=r["chunk_index"], text=r["content"], page_number=r.get("page_number") or 1, id=r["id"])
         for r in chunk_rows
     ]
 

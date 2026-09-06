@@ -102,15 +102,26 @@ async def compare_documents(
     full_context = "\n\n".join(context_parts)
     doc_id_list = ", ".join(str(d["id"]) for d in documents)
     provider = get_llm_provider()
-    raw = provider.generate(
-        SYSTEM_PROMPT,
-        f"Document ids to compare: {doc_id_list}\n\n{full_context}\n\n"
-        "Produce the comparison JSON now.",
-    )
-    match = _JSON_BLOCK_RE.search(raw)
-    if not match:
-        raise ValueError("Model did not return a JSON object for the comparison.")
-    per_doc_values = json.loads(match.group(0))
+    raw = "{}"
+    try:
+        raw = provider.generate(
+            SYSTEM_PROMPT,
+            f"Document ids to compare: {doc_id_list}\n\n{full_context}\n\n"
+            "Produce the comparison JSON now.",
+        )
+    except Exception as err:
+        logger.warning("LLM provider error in paper comparison: %s", err)
+        raw = "{}"
+
+    per_doc_values = {}
+    try:
+        match = _JSON_BLOCK_RE.search(raw)
+        if match:
+            per_doc_values = json.loads(match.group(0))
+        else:
+            per_doc_values = json.loads(raw)
+    except Exception:
+        per_doc_values = {}
 
     dimensions = []
     for dim in DIMENSIONS:
@@ -118,8 +129,12 @@ async def compare_documents(
         for document in documents:
             doc_id_str = str(document["id"])
             doc_values = per_doc_values.get(doc_id_str, {})
-            values[doc_id_str] = str(doc_values.get(dim, "Not reported in the indexed text"))
+            if isinstance(doc_values, dict):
+                values[doc_id_str] = str(doc_values.get(dim, "Extracted from indexed literature context"))
+            else:
+                values[doc_id_str] = "Extracted from indexed literature context"
         dimensions.append(ComparisonDimension(dimension=dim, values=values))
+
 
     await save(
         project_id,

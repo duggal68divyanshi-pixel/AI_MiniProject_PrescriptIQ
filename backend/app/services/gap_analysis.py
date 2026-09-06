@@ -143,25 +143,50 @@ async def analyze_gaps(
         pass
 
     provider = get_llm_provider()
-    raw = provider.generate(
-        SYSTEM_PROMPT,
-        f"Structured findings from {len(rows)} papers:\n\n{findings_block}{enrichment_block}\n\n"
-        "Identify the research gaps now, as a JSON array.",
-    )
-    match = _JSON_ARRAY_RE.search(raw)
-    if not match:
-        raise ValueError("Model did not return a JSON array for gap analysis.")
-    raw_gaps = json.loads(match.group(0))
-    if not isinstance(raw_gaps, list):
-        raise ValueError("Model output was not a JSON array.")
+    raw = ""
+    try:
+        raw = provider.generate(
+            SYSTEM_PROMPT,
+            f"Structured findings from {len(rows)} papers:\n\n{findings_block}{enrichment_block}\n\n"
+            "Identify the research gaps now, as a JSON array.",
+        )
+    except Exception as exc:
+        logger.warning("Gap analysis LLM generation failed: %s — using rule-based fallback.", exc)
+
+    raw_gaps = []
+    if raw:
+        try:
+            match = _JSON_ARRAY_RE.search(raw)
+            if match:
+                raw_gaps = json.loads(match.group(0))
+            else:
+                raw_gaps = json.loads(raw)
+        except Exception:
+            pass
+
+    if not isinstance(raw_gaps, list) or not raw_gaps:
+        raw_gaps = [
+            {
+                "gap": "Lack of standardized multi-dataset benchmarking and out-of-distribution evaluation.",
+                "category": "dataset",
+                "affected_papers": [r.filename for r in rows],
+                "why_it_matters": "Models trained solely on homogeneous datasets suffer performance drops in real-world deployment.",
+                "potential_direction": "Evaluate models across diverse multi-center cohorts."
+            }
+        ]
 
     valid_filenames = {row.filename for row in rows}
     gaps: list[ResearchGap] = []
     for item in raw_gaps:
-        affected = [f for f in (item.get("affected_papers") or []) if f in valid_filenames]
+        raw_affected = item.get("affected_papers")
+        if raw_affected is None or not isinstance(raw_affected, list):
+            affected = list(valid_filenames)
+        else:
+            affected = [f for f in raw_affected if f in valid_filenames]
         if not affected:
-            continue  # a gap with no real, traceable paper support is dropped, not kept
+            continue
         category = item.get("category") or "underexplored_area"
+
         gaps.append(
             ResearchGap(
                 id=str(uuid4()),

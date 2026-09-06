@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getProject, listProjectDocuments, deleteProject, updateProject } from "../../services/api.js";
 import PapersTab from "./tabs/PapersTab.jsx";
+import DiscoveryTab from "./tabs/DiscoveryTab.jsx";
 import AssistantTab from "./tabs/AssistantTab.jsx";
 import MatrixTab from "./tabs/MatrixTab.jsx";
 import CompareTab from "./tabs/CompareTab.jsx";
@@ -9,9 +10,11 @@ import InsightsTab from "./tabs/InsightsTab.jsx";
 import OverviewTab from "./tabs/OverviewTab.jsx";
 import IntelligenceTab from "./tabs/IntelligenceTab.jsx";
 import KnowledgeTab from "./tabs/KnowledgeTab.jsx";
+import AuthoringTab from "./tabs/AuthoringTab.jsx";
 
 const TABS = [
   { id: "overview", label: "Overview" },
+  { id: "discovery", label: "Literature Discovery" },
   { id: "papers", label: "Papers" },
   { id: "assistant", label: "Research Assistant" },
   { id: "intelligence", label: "Paper Intelligence" },
@@ -20,7 +23,9 @@ const TABS = [
   { id: "compare", label: "Compare Papers" },
   { id: "gaps", label: "Research Gaps" },
   { id: "insights", label: "Insights" },
+  { id: "authoring", label: "AI Paper Authoring" },
 ];
+
 
 const ACTIVE_STATUSES = new Set(["uploaded", "extracting", "chunking", "embedding"]);
 
@@ -170,9 +175,13 @@ export default function ProjectWorkspace({ projectId, onProjectChanged, onProjec
 
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {tab === "overview" && <OverviewTab project={project} documents={documents} />}
+        {tab === "discovery" && (
+          <DiscoveryTab projectId={projectId} onPaperImported={refreshAll} />
+        )}
         {tab === "papers" && (
           <PapersTab projectId={projectId} documents={documents} onChanged={refreshAll} />
         )}
+
         {tab === "assistant" && (
           <AssistantTab projectId={projectId} indexedDocuments={indexedDocuments} />
         )}
@@ -193,6 +202,9 @@ export default function ProjectWorkspace({ projectId, onProjectChanged, onProjec
         )}
         {tab === "insights" && (
           <InsightsTab projectId={projectId} indexedDocuments={indexedDocuments} />
+        )}
+        {tab === "authoring" && (
+          <AuthoringTab projectId={projectId} indexedDocuments={indexedDocuments} />
         )}
       </div>
     </div>

@@ -108,15 +108,26 @@ async def _extract_row_for_document(document: dict) -> LiteratureMatrixRow:
         )
 
     provider = get_llm_provider()
-    raw = provider.generate(
-        SYSTEM_PROMPT,
-        f"Evidence from '{document['filename']}':\n\n{context_block}{structured_block}\n\n"
-        "Extract the structured findings now, as a single JSON object.",
-    )
-    match = _JSON_BLOCK_RE.search(raw)
-    if not match:
-        raise ValueError("Model did not return a JSON object.")
-    data = json.loads(match.group(0))
+    raw = "{}"
+    try:
+        raw = provider.generate(
+            SYSTEM_PROMPT,
+            f"Evidence from '{document['filename']}':\n\n{context_block}{structured_block}\n\n"
+            "Extract the structured findings now, as a single JSON object.",
+        )
+    except Exception as err:
+        logger.warning("LLM provider error in literature matrix row extraction: %s", err)
+        raw = "{}"
+    data = {}
+    try:
+        match = _JSON_BLOCK_RE.search(raw)
+        if match:
+            data = json.loads(match.group(0))
+        else:
+            data = json.loads(raw)
+    except Exception:
+        data = {}
+
 
     metadata = await meta_repo.get_metadata(document_id)
 

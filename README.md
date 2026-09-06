@@ -204,37 +204,80 @@ Then edit `backend/.env`:
 
 ## 10. Running the backend
 
-```bash
+### Windows Command Prompt (cmd.exe)
+```cmd
 cd backend
 python -m venv venv
-venv\Scripts\activate            # Windows
-# source venv/bin/activate       # macOS/Linux
+call venv\Scripts\activate.bat
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Backend runs at `http://localhost:8000`. Interactive API docs at
-`http://localhost:8000/docs`.
+### Windows PowerShell
+```powershell
+cd backend
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+### macOS / Linux Terminal
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+> **Note**: You can also launch uvicorn using Python module invocation:
+> `python -m uvicorn app.main:app --reload --port 8000`
+
+Backend runs at `http://localhost:8000`. Interactive API docs at `http://localhost:8000/docs`.
+
+---
 
 ## 11. Running the frontend
 
-```bash
+### Windows CMD / PowerShell / macOS / Linux
+```cmd
 cd frontend
 npm install
 npm run dev
 ```
 
-Frontend runs at `http://localhost:5173` and proxies `/api/*` to the
-backend (see `vite.config.js`).
+Frontend runs at `http://localhost:5173` and proxies `/api/*` to the backend (configured in `vite.config.js`).
 
-## 12. API endpoints
+---
+
+### Quick Start Command Summary (Running Application)
+
+Open **two separate terminal windows** in the repository root directory:
+
+#### Terminal 1 — Backend (Windows CMD)
+```cmd
+cd backend
+call venv\Scripts\activate.bat
+uvicorn app.main:app --reload --port 8000
+```
+
+#### Terminal 2 — Frontend (Windows CMD)
+```cmd
+cd frontend
+npm run dev
+```
 
 | Method | Path | Description |
 |---|---|---|
 | POST | `/api/documents/upload` | Upload a PDF, creates a document record, kicks off background processing |
 | GET | `/api/documents` | List all documents with live status |
 | GET | `/api/documents/{id}` | Get one document's status/metadata |
+| GET | `/api/documents/{id}/citation` | Get formatted paper citations (APA, IEEE, MLA, Chicago, BibTeX, RIS) |
 | POST | `/api/documents/{id}/process` | Re-run the pipeline (e.g. after a failure) |
+| GET | `/api/discovery/search` | Search real scholarly papers across arXiv, Semantic Scholar, OpenAlex, & Crossref |
+| POST | `/api/projects/{id}/export/bibtex` | Download project bibliography as `.bib` file |
+| POST | `/api/projects/{id}/export/ris` | Download project bibliography as `.ris` file |
 | POST | `/api/search` | Raw semantic search — returns top-k chunks + real similarity scores |
 | POST | `/api/chat` | RAG question answering — returns grounded answer + sources |
 | GET | `/api/health` | DB connectivity, embedding model, LLM provider status |
@@ -256,11 +299,22 @@ backend (see `vite.config.js`).
 
 ## 14. Embedding model explanation
 
-`sentence-transformers/all-MiniLM-L6-v2` was chosen because it:
+`sentence-transformers/all-MiniLM-L6-v2` is configured by default because it:
 - runs fully locally with no API cost or network dependency at query time,
 - is small enough (~80MB) to load quickly in local development,
 - produces 384-dimensional embeddings that work well for short-to-medium
   passage retrieval (its intended use case).
+
+### Using SciBERT or SPECTER
+To use scientific domain models such as **SciBERT** or **SPECTER**, simply update `backend/.env`:
+
+```env
+# SciBERT (768 dimensions)
+EMBEDDING_MODEL_NAME=sentence-transformers/allenai-scibert_scivocab_uncased
+EMBEDDING_DIMENSION=768
+```
+
+> **Note**: When changing `EMBEDDING_DIMENSION` from 384 to 768, update the `embedding vector(768)` column definition in your Postgres/Supabase table before inserting data.
 
 Embeddings are L2-normalized at generation time, so pgvector's cosine
 distance operator (`<=>`) behaves identically to a dot-product search.
