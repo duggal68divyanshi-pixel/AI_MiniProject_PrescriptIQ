@@ -16,6 +16,7 @@ from uuid import UUID
 
 import fitz  # PyMuPDF
 import httpx
+from fastapi import BackgroundTasks
 
 from app.core.config import get_settings
 from app.core.exceptions import ResearchNexusError
@@ -426,7 +427,9 @@ def _create_synthetic_paper_pdf(paper: ImportDiscoveredPaperRequest) -> bytes:
 
 
 async def import_discovered_paper(
-    project_id: UUID | None, paper: ImportDiscoveredPaperRequest
+    project_id: UUID | None,
+    paper: ImportDiscoveredPaperRequest,
+    background_tasks: BackgroundTasks | None = None,
 ) -> UUID:
     """Download PDF or create indexed paper record and trigger extraction pipeline."""
     settings = get_settings()
@@ -460,5 +463,8 @@ async def import_discovered_paper(
     (upload_dir / f"{document_id}.pdf").write_bytes(pdf_bytes)
 
     # Trigger background processing
-    await process_document(document_id, pdf_bytes, safe_name)
+    if background_tasks is not None:
+        background_tasks.add_task(process_document, document_id, pdf_bytes, safe_name)
+    else:
+        await process_document(document_id, pdf_bytes, safe_name)
     return document_id

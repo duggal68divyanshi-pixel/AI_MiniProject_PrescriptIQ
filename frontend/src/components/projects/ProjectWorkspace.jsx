@@ -174,7 +174,14 @@ export default function ProjectWorkspace({ projectId, onProjectChanged, onProjec
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-        {tab === "overview" && <OverviewTab project={project} documents={documents} />}
+        {tab === "overview" && (
+          <OverviewTab
+            project={project}
+            documents={documents}
+            onNavigate={(t) => setTab(t)}
+            onProjectChanged={refreshAll}
+          />
+        )}
         {tab === "discovery" && (
           <DiscoveryTab projectId={projectId} onPaperImported={refreshAll} />
         )}

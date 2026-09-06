@@ -231,7 +231,7 @@ async def _run_chunkless_extraction(document_id: UUID, document: dict, job_id, _
         "end_chunk_index": 0,
         "page_start": 1,
         "page_end": 1,
-        "detection_method": "chunkless_fallback",
+        "detection_method": "fallback",
         "confidence": None,
     }])
 

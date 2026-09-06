@@ -18,7 +18,7 @@ export default function OverviewTab({ project, documents, onNavigate, onProjectC
     e?.preventDefault();
     setSaving(true);
     try {
-      await updateProject(project.id, project.name, desc);
+      await updateProject(project.id, { name: project.name, description: desc });
       setEditingTopic(false);
       onProjectChanged?.();
     } catch (err) {

@@ -42,7 +42,7 @@ async def import_paper_to_project(
     background_tasks: BackgroundTasks,
 ):
     await proj_repo.get_project(project_id)
-    document_id = await import_discovered_paper(project_id, payload)
+    document_id = await import_discovered_paper(project_id, payload, background_tasks=background_tasks)
     return DocumentUploadResponse(
         id=document_id,
         filename=f"{payload.title[:50]}.pdf",
@@ -56,7 +56,7 @@ async def import_paper_standalone(
     payload: ImportDiscoveredPaperRequest,
     background_tasks: BackgroundTasks,
 ):
-    document_id = await import_discovered_paper(None, payload)
+    document_id = await import_discovered_paper(None, payload, background_tasks=background_tasks)
     return DocumentUploadResponse(
         id=document_id,
         filename=f"{payload.title[:50]}.pdf",
