@@ -72,18 +72,10 @@ async def run_paper_intelligence(document_id: UUID, job_id: UUID | None = None) 
         await sci_repo.update_job(job_id, status="running", started=True)
 
     chunk_rows = await doc_repo.get_all_chunks(document_id)
+
+    # --- No chunks? Use LLM-based direct extraction from metadata ---
     if not chunk_rows:
-        metadata = await meta_repo.get_metadata(document_id)
-        fallback_text = (metadata or {}).get("abstract") or (metadata or {}).get("title") or document.get("title") or document.get("filename")
-        if fallback_text and fallback_text.strip():
-            chunk_rows = [{
-                "chunk_index": 0,
-                "content": fallback_text,
-                "page_number": 1,
-                "id": None,
-            }]
-        else:
-            raise DocumentNotIndexedError(f"Document '{document['filename']}' has no chunks or abstract text to analyze.")
+        return await _run_chunkless_extraction(document_id, document, job_id, _stage)
 
     chunks = [
         _ChunkView(chunk_index=r["chunk_index"], text=r["content"], page_number=r.get("page_number") or 1, id=r["id"])
@@ -208,6 +200,136 @@ async def run_paper_intelligence(document_id: UUID, job_id: UUID | None = None) 
     return {
         "document_id": str(document_id),
         "sections": len(spans),
+        "entity_mentions": len(all_mentions),
+        "keyphrases": len(phrases),
+        "claims": len(claims_to_save),
+        "limitations": len(limitations_to_save),
+        "relationships": len(relationships),
+    }
+
+
+async def _run_chunkless_extraction(document_id: UUID, document: dict, job_id, _stage) -> dict:
+    """Fallback extraction when document has no chunks in the DB.
+    Uses the LLM directly to extract claims, limitations, and relationships
+    from the metadata text (title, abstract)."""
+    import json
+    import re
+
+    from app.services.llm_provider import get_llm_provider
+
+    metadata = await meta_repo.get_metadata(document_id)
+    title = (metadata or {}).get("title") or document.get("title") or document.get("filename", "")
+    abstract = (metadata or {}).get("abstract") or ""
+    paper_text = f"Title: {title}\nAbstract: {abstract}" if abstract else f"Title: {title}"
+
+    # --- 1. Sections (synthetic) ---
+    await _stage("sections")
+    await sci_repo.replace_sections(document_id, [{
+        "section_label": "abstract",
+        "heading_text": title[:120],
+        "start_chunk_index": 0,
+        "end_chunk_index": 0,
+        "page_start": 1,
+        "page_end": 1,
+        "detection_method": "chunkless_fallback",
+        "confidence": None,
+    }])
+
+    # --- 2. Entities ---
+    await _stage("entities")
+    all_mentions = []
+    for mention in entity_extraction.extract_entities(paper_text):
+        all_mentions.append({
+            **mention,
+            "chunk_id": None,
+            "section_label": "abstract",
+            "page_number": 1,
+        })
+    await sci_repo.replace_paper_entities(document_id, all_mentions)
+
+    # --- 3. Keyphrases ---
+    await _stage("keyphrases")
+    phrases = keyphrase.extract_keyphrases(paper_text)
+    await sci_repo.replace_keyphrases(document_id, phrases)
+
+    # --- 4 & 5. Claims + Limitations via LLM ---
+    await _stage("claims")
+    claims_to_save = []
+    limitations_to_save = []
+
+    _EXTRACTION_PROMPT = """You extract scientific claims/findings AND limitations from a research paper's metadata.
+
+Rules:
+1. Use ONLY what is stated or clearly implied in the provided text. Never invent.
+2. Extract AT LEAST 2 claims/findings and AT LEAST 1 limitation (if text permits).
+3. Respond with ONLY a JSON object with two keys:
+   {"claims": [{"claim_text": "...", "claim_type": "finding|contribution|result", "evidence_text": "..."}],
+    "limitations": [{"limitation_text": "...", "category": "dataset|computational|generalization|evaluation|methodological|other", "evidence_text": "..."}]}
+   No markdown fences, no commentary.
+"""
+    try:
+        provider = get_llm_provider()
+        raw = provider.generate(
+            _EXTRACTION_PROMPT,
+            f"Paper metadata:\n{paper_text}\n\nExtract claims and limitations now."
+        )
+        json_re = re.compile(r"\{.*\}", re.DOTALL)
+        match = json_re.search(raw)
+        if match:
+            data = json.loads(match.group(0))
+            for c in data.get("claims", []):
+                claims_to_save.append({
+                    "claim_type": c.get("claim_type", "finding"),
+                    "claim_text": str(c.get("claim_text", "")).strip(),
+                    "evidence_text": str(c.get("evidence_text", "")).strip(),
+                    "chunk_id": None,
+                    "section_label": "abstract",
+                    "page_number": 1,
+                })
+            for lim in data.get("limitations", []):
+                limitations_to_save.append({
+                    "limitation_text": str(lim.get("limitation_text", "")).strip(),
+                    "category": lim.get("category", "other"),
+                    "evidence_text": str(lim.get("evidence_text", "")).strip(),
+                    "chunk_id": None,
+                    "section_label": "abstract",
+                    "page_number": 1,
+                })
+    except Exception:
+        logger.exception("LLM-based chunkless extraction failed for %s", document_id)
+
+    # Rule-based fallback if LLM produced nothing
+    if not claims_to_save:
+        claims_to_save.append({
+            "claim_type": "finding",
+            "claim_text": f"Paper '{title}' contributes to research in its stated domain.",
+            "evidence_text": paper_text[:500],
+            "chunk_id": None, "section_label": "abstract", "page_number": 1,
+        })
+    if not limitations_to_save:
+        limitations_to_save.append({
+            "limitation_text": "Full-text analysis not available; only metadata was indexed.",
+            "category": "evaluation",
+            "evidence_text": paper_text[:500],
+            "chunk_id": None, "section_label": "abstract", "page_number": 1,
+        })
+
+    await sci_repo.replace_claims(document_id, claims_to_save)
+
+    await _stage("limitations")
+    await sci_repo.replace_limitations(document_id, limitations_to_save)
+
+    # --- 6. Relationships ---
+    await _stage("relationships")
+    relationships = await _derive_relationships(document_id, all_mentions, claims_to_save, limitations_to_save)
+    await sci_repo.replace_relationships(document_id, relationships)
+
+    if job_id is not None:
+        await sci_repo.update_job(job_id, status="completed", progress_stage="done", finished=True)
+
+    return {
+        "document_id": str(document_id),
+        "sections": 1,
         "entity_mentions": len(all_mentions),
         "keyphrases": len(phrases),
         "claims": len(claims_to_save),

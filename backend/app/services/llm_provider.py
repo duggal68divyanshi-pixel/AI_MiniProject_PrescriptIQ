@@ -121,7 +121,38 @@ class MockProvider(LLMProvider):
                 }
             return json.dumps(comp_obj)
 
-        # 2. Research Gap Analysis Schema
+        # 2. Claims & Limitations from metadata (chunkless extraction)
+        if "claims" in sys_lower and "limitations" in sys_lower and "json" in sys_lower:
+            return json.dumps({
+                "claims": [
+                    {"claim_text": "The paper proposes a novel approach contributing to its research domain.", "claim_type": "contribution", "evidence_text": user_prompt[:200]},
+                    {"claim_text": "The methodology demonstrates effectiveness on benchmark evaluation tasks.", "claim_type": "finding", "evidence_text": user_prompt[:200]},
+                ],
+                "limitations": [
+                    {"limitation_text": "Evaluation is limited to standard benchmark datasets; broader generalization requires further validation.", "category": "generalization", "evidence_text": user_prompt[:200]},
+                ]
+            })
+
+        # 3. Claim normalization (JSON array of claim objects)
+        if "claim" in sys_lower and "normalize" in sys_lower and "json array" in sys_lower:
+            # Parse candidate sentences from user prompt
+            candidates = [line.strip().lstrip("0123456789. ") for line in user_prompt.splitlines() if line.strip() and not line.startswith("Candidate") and not line.startswith("Normalize")]
+            candidates = [c for c in candidates if len(c) > 20]
+            items = []
+            for c in candidates[:6]:
+                items.append({"claim_text": c, "claim_type": "finding", "evidence_text": c})
+            return json.dumps(items) if items else "[]"
+
+        # 4. Limitation normalization (JSON array of limitation objects)
+        if "limitation" in sys_lower and "normalize" in sys_lower and "json array" in sys_lower:
+            candidates = [line.strip().lstrip("0123456789. ") for line in user_prompt.splitlines() if line.strip() and not line.startswith("Candidate") and not line.startswith("Normalize")]
+            candidates = [c for c in candidates if len(c) > 20]
+            items = []
+            for c in candidates[:6]:
+                items.append({"limitation_text": c, "category": "other", "evidence_text": c})
+            return json.dumps(items) if items else "[]"
+
+        # 5. Research Gap Analysis Schema
         if "gap" in sys_lower or "gap" in usr_lower:
 
             # Extract filenames mentioned in user prompt if any
@@ -149,7 +180,7 @@ class MockProvider(LLMProvider):
                 }
             ])
 
-        # 2. Research Questions Generation Schema
+        # 6. Research Questions Generation Schema
         if "question" in sys_lower and "json" in sys_lower:
             return json.dumps([
                 {
@@ -162,7 +193,7 @@ class MockProvider(LLMProvider):
                 }
             ])
 
-        # 3. Literature Matrix Schema
+        # 7. Literature Matrix Schema
         if "matrix" in sys_lower or "literature review" in sys_lower:
             return json.dumps({
                 "research_problem": "Automated detection and classification of dermoscopic skin lesions.",
@@ -175,7 +206,7 @@ class MockProvider(LLMProvider):
                 "limitations": "Evaluated primarily on standard datasets; cross-scanner generalizability needs further validation."
             })
 
-        # 4. Metadata Extraction Schema
+        # 8. Metadata Extraction Schema
         if "metadata" in sys_lower or ("json" in sys_lower and "title" in sys_lower):
             lines = [l.strip() for l in user_prompt.splitlines() if l.strip()]
             first_line = lines[0] if lines else "Sample Scientific Paper"
