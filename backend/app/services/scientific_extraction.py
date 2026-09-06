@@ -261,11 +261,20 @@ async def _derive_relationships(
             }
         )
 
-    # Paper -> reports -> Result (claim_type == 'result')
+    # Paper -> reports -> Claim / Finding
     for c in claims:
-        if c["claim_type"] == "result":
+        text = c.get("claim_text") or c.get("evidence_text")
+        if text:
             relationships.append(
-                {"predicate": "reports", "object_type": "text", "object_text": c["claim_text"], "confidence": None}
+                {"predicate": "reports", "object_type": "text", "object_text": text, "confidence": None}
+            )
+
+    # Paper -> constrained_by -> Limitation
+    for lim in limitations:
+        text = lim.get("limitation_text") or lim.get("evidence_text")
+        if text:
+            relationships.append(
+                {"predicate": "constrained_by", "object_type": "text", "object_text": text, "confidence": None}
             )
 
     return relationships
