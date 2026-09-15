@@ -117,8 +117,12 @@ async def generate_manuscript_section(
         for r in rows
     )
 
-    common_methods = ", ".join(knowledge.get("common_methods", [])) or "None extracted"
-    common_datasets = ", ".join(knowledge.get("common_datasets", [])) or "None extracted"
+    common_methods = ", ".join(
+        e["canonical_name"] for e in knowledge.get("top_methods", []) if isinstance(e, dict) and e.get("canonical_name")
+    ) or "None extracted"
+    common_datasets = ", ".join(
+        e["canonical_name"] for e in knowledge.get("top_datasets", []) if isinstance(e, dict) and e.get("canonical_name")
+    ) or "None extracted"
 
     section_guidance = SECTION_PROMPTS.get(section_type, SECTION_PROMPTS["related_work"])
     extra_prompt = f"\nUser Custom Focus: {custom_instructions}" if custom_instructions else ""

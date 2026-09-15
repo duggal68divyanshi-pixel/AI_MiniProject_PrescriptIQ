@@ -49,10 +49,56 @@ Rules you MUST follow:
    {"<document_id>": {"Problem": "...", "Methodology": "...", "Model/Architecture": "...",
      "Dataset": "...", "Evaluation Metrics": "...", "Results": "...",
      "Contributions": "...", "Limitations": "..."}, ...}
-   with one top-level key per document_id given below. No markdown fences, no commentary.
+   with one top-level key per document_id given below. Use the EXACT document_id string (UUID) as the JSON key. No markdown fences, no commentary.
 """
 
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
+_NOT_REPORTED = "Not reported in the indexed text"
+
+
+def _get_doc_values_flexibly(per_doc_values: dict, document: dict, idx: int) -> dict:
+    if not isinstance(per_doc_values, dict):
+        return {}
+
+    doc_id_str = str(document["id"])
+    filename = document.get("filename", "")
+    filename_no_ext = filename.rsplit(".", 1)[0] if "." in filename else filename
+    title = document.get("title") or ""
+    paper_label = f"Paper {idx + 1}"
+
+    candidates = [
+        doc_id_str,
+        filename,
+        filename_no_ext,
+        title,
+        paper_label,
+        f"Paper {doc_id_str}",
+        f"Document {doc_id_str}",
+        f"Document {idx + 1}",
+    ]
+    for key in candidates:
+        if key and key in per_doc_values and isinstance(per_doc_values[key], dict):
+            return per_doc_values[key]
+
+    for k, v in per_doc_values.items():
+        if isinstance(v, dict):
+            k_lower = str(k).lower()
+            if (
+                doc_id_str.lower() in k_lower
+                or (filename and filename.lower() in k_lower)
+                or (filename_no_ext and filename_no_ext.lower() in k_lower)
+                or (title and title.lower() in k_lower)
+                or (f"paper {idx + 1}" in k_lower)
+                or (f"doc {idx + 1}" in k_lower)
+            ):
+                return v
+
+    if str(idx) in per_doc_values and isinstance(per_doc_values[str(idx)], dict):
+        return per_doc_values[str(idx)]
+    if idx in per_doc_values and isinstance(per_doc_values[idx], dict):
+        return per_doc_values[idx]
+
+    return {}
 
 
 async def compare_documents(
@@ -126,13 +172,13 @@ async def compare_documents(
     dimensions = []
     for dim in DIMENSIONS:
         values = {}
-        for document in documents:
+        for idx, document in enumerate(documents):
             doc_id_str = str(document["id"])
-            doc_values = per_doc_values.get(doc_id_str, {})
-            if isinstance(doc_values, dict):
-                values[doc_id_str] = str(doc_values.get(dim, "Extracted from indexed literature context"))
-            else:
-                values[doc_id_str] = "Extracted from indexed literature context"
+            doc_values = _get_doc_values_flexibly(per_doc_values, document, idx)
+            val = doc_values.get(dim)
+            if not val or not str(val).strip():
+                val = _NOT_REPORTED
+            values[doc_id_str] = str(val)
         dimensions.append(ComparisonDimension(dimension=dim, values=values))
 
 

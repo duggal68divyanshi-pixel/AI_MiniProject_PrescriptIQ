@@ -165,24 +165,42 @@ async def analyze_gaps(
             pass
 
     if not isinstance(raw_gaps, list) or not raw_gaps:
+        # Derive a real fallback gap from the actual limitations text in the matrix rows
+        # so we never invent domain-specific content when the LLM fails.
+        all_limitations = [row.limitations for row in rows if row.limitations and "not reported" not in row.limitations.lower()]
+        lim_summary = " | ".join(all_limitations[:3]) if all_limitations else "See individual paper analyses for details."
         raw_gaps = [
             {
-                "gap": "Lack of standardized multi-dataset benchmarking and out-of-distribution evaluation.",
-                "category": "dataset",
+                "gap": f"Limitations identified across {len(rows)} papers remain unaddressed in the collective literature: {lim_summary[:300]}",
+                "category": "repeated_limitation",
                 "affected_papers": [r.filename for r in rows],
-                "why_it_matters": "Models trained solely on homogeneous datasets suffer performance drops in real-world deployment.",
-                "potential_direction": "Evaluate models across diverse multi-center cohorts."
+                "why_it_matters": "Recurring limitations across papers signal unresolved challenges that future work should prioritize.",
+                "potential_direction": "Synthesize and directly address the shared limitations identified across these papers."
             }
         ]
 
+    # Build a lookup: normalized filename (no ext, lowercase) -> original filename
+    # so we tolerate LLM returning "paper" when the real filename is "paper.pdf"
+    def _normalize(name: str) -> str:
+        import os
+        return os.path.splitext(name.strip())[0].lower()
+
+    valid_normalized = {_normalize(row.filename): row.filename for row in rows}
     valid_filenames = {row.filename for row in rows}
+
     gaps: list[ResearchGap] = []
     for item in raw_gaps:
         raw_affected = item.get("affected_papers")
         if raw_affected is None or not isinstance(raw_affected, list):
             affected = list(valid_filenames)
         else:
-            affected = [f for f in raw_affected if f in valid_filenames]
+            resolved = []
+            for f in raw_affected:
+                if f in valid_filenames:
+                    resolved.append(f)
+                elif _normalize(f) in valid_normalized:
+                    resolved.append(valid_normalized[_normalize(f)])
+            affected = resolved
         if not affected:
             continue
         category = item.get("category") or "underexplored_area"
