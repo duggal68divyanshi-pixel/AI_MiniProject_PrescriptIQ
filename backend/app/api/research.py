@@ -19,6 +19,7 @@ from app.models.schemas import (
     ResearchQuestionsRequest,
     ResearchQuestionsResponse,
 )
+from app.services import document_repository as doc_repo
 from app.services import project_repository as proj_repo
 from app.services.analytics import get_project_analytics
 from app.services.comparison import compare_documents
@@ -131,7 +132,7 @@ async def export_project_bibtex(project_id: UUID):
     from app.services.metadata_repository import get_metadata_for_documents
 
     project = await proj_repo.get_project(project_id)
-    docs = await proj_repo.list_project_documents(project_id)
+    docs = await doc_repo.list_documents(project_id=project_id)
     indexed_ids = [d["id"] for d in docs if d["status"] == "indexed"]
     metadata_map = await get_metadata_for_documents(indexed_ids)
 
@@ -164,7 +165,7 @@ async def export_project_ris(project_id: UUID):
     from app.services.metadata_repository import get_metadata_for_documents
 
     project = await proj_repo.get_project(project_id)
-    docs = await proj_repo.list_project_documents(project_id)
+    docs = await doc_repo.list_documents(project_id=project_id)
     indexed_ids = [d["id"] for d in docs if d["status"] == "indexed"]
     metadata_map = await get_metadata_for_documents(indexed_ids)
 

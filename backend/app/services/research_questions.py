@@ -29,19 +29,44 @@ _JSON_ARRAY_RE = re.compile(r"\[.*\]", re.DOTALL)
 
 async def _generate_questions_for_gap(gap: ResearchGap) -> list[str]:
     provider = get_llm_provider()
-    raw = provider.generate(
-        SYSTEM_PROMPT,
-        f"Gap: {gap.gap}\nWhy it matters: {gap.why_it_matters}\n"
-        f"Potential direction: {gap.potential_direction}\n\n"
-        "Generate the research questions now, as a JSON array of strings.",
-    )
-    match = _JSON_ARRAY_RE.search(raw)
-    if not match:
-        return []
-    data = json.loads(match.group(0))
-    if not isinstance(data, list):
-        return []
-    return [str(q).strip() for q in data if str(q).strip()]
+    try:
+        raw = provider.generate(
+            SYSTEM_PROMPT,
+            f"Gap: {gap.gap}\nWhy it matters: {gap.why_it_matters}\n"
+            f"Potential direction: {gap.potential_direction}\n\n"
+            "Generate the research questions now, as a JSON array of strings.",
+        )
+    except Exception as exc:
+        logger.warning("LLM call failed for gap %s: %s — using gap-derived fallback questions.", gap.id, exc)
+        raw = ""
+
+    if raw:
+        try:
+            match = _JSON_ARRAY_RE.search(raw)
+            if match:
+                data = json.loads(match.group(0))
+                if isinstance(data, list):
+                    questions = [str(q).strip() for q in data if str(q).strip()]
+                    if questions:
+                        return questions
+        except Exception:
+            pass
+
+    # Fallback: derive questions directly from the gap metadata so we never
+    # return empty when a gap is available but the LLM parse failed.
+    fallback = []
+    if gap.potential_direction:
+        fallback.append(
+            f"How can researchers address the gap of '{gap.gap[:120]}' "
+            f"by pursuing: {gap.potential_direction}?"
+        )
+    if gap.why_it_matters:
+        fallback.append(
+            f"What experimental approaches would validate the claim that '{gap.why_it_matters[:120]}'?"
+        )
+    if not fallback:
+        fallback.append(f"What methodological advances would resolve the identified gap: '{gap.gap[:120]}'?")
+    return fallback
 
 
 async def _get_cached_questions(gap_analysis_id: UUID) -> list[dict] | None:
