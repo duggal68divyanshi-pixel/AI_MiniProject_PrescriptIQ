@@ -2,6 +2,75 @@ import { useState, useEffect } from "react";
 import { askProjectQuestion, getProjectChatHistory } from "../../../services/api.js";
 import SourceReferences from "../../SourceReferences.jsx";
 
+// Lightweight inline markdown renderer — no external dependency needed.
+// Handles: **bold**, *italic*, `code`, ## headers, numbered/bullet lists, line breaks.
+function renderMarkdown(text) {
+  if (!text) return null;
+  const lines = text.split("\n");
+  const elements = [];
+  let i = 0;
+
+  const parseLine = (line) => {
+    // Replace inline markdown: **bold**, *italic*, `code`
+    const parts = [];
+    const re = /(\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`)/g;
+    let last = 0;
+    let m;
+    while ((m = re.exec(line)) !== null) {
+      if (m.index > last) parts.push(line.slice(last, m.index));
+      if (m[2]) parts.push(<strong key={m.index}>{m[2]}</strong>);
+      else if (m[3]) parts.push(<em key={m.index}>{m[3]}</em>);
+      else if (m[4]) parts.push(<code key={m.index} className="rounded bg-stone-100 px-1 font-mono text-xs text-stone-700">{m[4]}</code>);
+      last = m.index + m[0].length;
+    }
+    if (last < line.length) parts.push(line.slice(last));
+    return parts.length > 0 ? parts : line;
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    // Heading
+    if (/^#{1,3}\s/.test(line)) {
+      const level = line.match(/^(#+)/)[1].length;
+      const content = line.replace(/^#+\s/, "");
+      const cls = level === 1 ? "mt-3 mb-1 text-sm font-bold text-ink" : level === 2 ? "mt-2 mb-0.5 text-sm font-semibold text-ink" : "mt-1.5 mb-0.5 text-xs font-semibold text-muted uppercase tracking-wide";
+      elements.push(<p key={i} className={cls}>{parseLine(content)}</p>);
+      i++;
+      continue;
+    }
+    // Numbered list
+    if (/^\d+\.\s/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
+        items.push(<li key={i} className="ml-4 list-decimal">{parseLine(lines[i].replace(/^\d+\.\s/, ""))}</li>);
+        i++;
+      }
+      elements.push(<ol key={`ol-${i}`} className="my-1 flex flex-col gap-0.5 text-sm text-ink">{items}</ol>);
+      continue;
+    }
+    // Bullet list
+    if (/^[-*]\s/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^[-*]\s/.test(lines[i])) {
+        items.push(<li key={i} className="ml-4 list-disc">{parseLine(lines[i].replace(/^[-*]\s/, ""))}</li>);
+        i++;
+      }
+      elements.push(<ul key={`ul-${i}`} className="my-1 flex flex-col gap-0.5 text-sm text-ink">{items}</ul>);
+      continue;
+    }
+    // Empty line
+    if (line.trim() === "") {
+      elements.push(<div key={i} className="h-2" />);
+      i++;
+      continue;
+    }
+    // Regular paragraph
+    elements.push(<p key={i} className="text-sm leading-relaxed text-ink">{parseLine(line)}</p>);
+    i++;
+  }
+  return <div className="flex flex-col gap-0.5">{elements}</div>;
+}
+
 export default function AssistantTab({ projectId, indexedDocuments }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -89,7 +158,7 @@ export default function AssistantTab({ projectId, indexedDocuments }) {
               )}
               {m.role === "assistant" && (
                 <div className="max-w-xl rounded-lg border border-line bg-white px-4 py-3">
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{m.text}</p>
+                  <div className="leading-relaxed">{renderMarkdown(m.text)}</div>
                   {!m.grounded && (
                     <p className="mt-2 font-mono text-[11px] uppercase tracking-wide text-muted">
                       No grounded sources retrieved

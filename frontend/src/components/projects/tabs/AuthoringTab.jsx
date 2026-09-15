@@ -117,14 +117,26 @@ export default function AuthoringTab({ projectId, indexedDocuments }) {
           <p className="font-mono text-[11px] text-muted">
             Analyzing {indexedDocuments.length} indexed paper(s) in project context
           </p>
-          <button
-            type="button"
-            onClick={(e) => handleGenerate(e, true)}
-            disabled={loading || indexedDocuments.length === 0}
-            className="rounded-md bg-pine-600 px-6 py-2 font-mono text-xs uppercase tracking-wider text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {loading ? "Drafting Section…" : result ? "Regenerate Draft" : "Generate Section Draft"}
-          </button>
+          <div className="flex gap-2">
+            {result && !loading && (
+              <button
+                type="button"
+                onClick={(e) => handleGenerate(e, true)}
+                disabled={loading || indexedDocuments.length === 0}
+                className="rounded-md border border-line px-4 py-2 font-mono text-xs uppercase tracking-wider text-ink hover:border-pine-400 disabled:opacity-50"
+              >
+                Regenerate Fresh
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => handleGenerate(e, false)}
+              disabled={loading || indexedDocuments.length === 0}
+              className="rounded-md bg-pine-600 px-6 py-2 font-mono text-xs uppercase tracking-wider text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? "Drafting Section…" : result ? "Load Draft" : "Generate Section Draft"}
+            </button>
+          </div>
         </div>
       </form>
 
