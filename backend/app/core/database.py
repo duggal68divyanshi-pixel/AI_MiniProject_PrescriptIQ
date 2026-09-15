@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
+from urllib.parse import urlparse, unquote
 
 import asyncpg
 
@@ -26,8 +27,16 @@ async def init_pool() -> None:
     if _pool is not None:
         return
     try:
+        # Parse the DSN manually so asyncpg receives explicit kwargs.
+        # This avoids asyncpg misinterpreting dots in the username
+        # (e.g. Supabase session-pooler usernames like postgres.PROJECT_REF).
+        parsed = urlparse(settings.database_url)
         _pool = await asyncpg.create_pool(
-            dsn=settings.database_url,
+            host=parsed.hostname,
+            port=parsed.port or 5432,
+            user=unquote(parsed.username or ""),
+            password=unquote(parsed.password or ""),
+            database=(parsed.path or "/postgres").lstrip("/") or "postgres",
             min_size=1,
             max_size=10,
             command_timeout=30,
