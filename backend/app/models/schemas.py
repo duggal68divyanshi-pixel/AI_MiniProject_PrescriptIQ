@@ -382,6 +382,8 @@ class ProjectKnowledgeResponse(BaseModel):
     topics: list[dict]
     common_limitations: list[dict]
     key_findings: list[dict]
+    top_relationships: list[dict] = []
+
 
 
 class EntityDetailResponse(BaseModel):

@@ -46,6 +46,8 @@ export default function KnowledgeTab({ projectId, indexedDocuments }) {
   const [error, setError] = useState(null);
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [selectedTopic, setSelectedTopic] = useState(null);
+  const [relPredicateFilter, setRelPredicateFilter] = useState("all");
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -278,8 +280,65 @@ export default function KnowledgeTab({ projectId, indexedDocuments }) {
               </ul>
             )}
           </div>
+
+          {/* Project Knowledge Graph & Relationships */}
+          <div className="lg:col-span-2 rounded-md border border-line bg-white px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
+              <div>
+                <p className="font-mono text-[11px] font-semibold uppercase tracking-wide text-pine-700">
+                  Knowledge Graph &amp; Project Relationships
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  Relational triples extracted across papers (Paper → Predicate → Entity / Claim)
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-1 text-xs">
+                {["all", "proposes", "uses", "evaluates_on", "reports", "has_limitation"].map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setRelPredicateFilter(p)}
+                    className={`rounded px-2 py-1 font-mono text-[11px] capitalize transition-colors ${
+                      relPredicateFilter === p
+                        ? "bg-pine-600 font-medium text-paper"
+                        : "border border-line bg-white text-muted hover:text-ink"
+                    }`}
+                  >
+                    {p.replace("_", " ")}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {(!knowledge.top_relationships || knowledge.top_relationships.length === 0) ? (
+              <p className="mt-3 text-sm text-muted">No relationships derived yet.</p>
+            ) : (
+              <ul className="mt-3 flex flex-col gap-2 max-h-80 overflow-y-auto scrollbar-thin pr-1">
+                {knowledge.top_relationships
+                  .filter((r) => relPredicateFilter === "all" || r.predicate === relPredicateFilter)
+                  .map((r, i) => (
+                    <li key={r.id || i} className="flex flex-wrap items-center justify-between gap-2 rounded border border-line/60 bg-paper/50 px-3 py-2 text-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono font-medium text-ink">{r.filename}</span>
+                        <span className="rounded bg-pine-100 px-2 py-0.5 font-mono text-[10px] font-bold uppercase text-pine-800">
+                          {r.predicate}
+                        </span>
+                        <span className="font-medium text-ink">
+                          {r.entity_name || r.claim_text || r.limitation_text || r.object_text}
+                        </span>
+                      </div>
+                      {r.entity_type && (
+                        <span className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted">
+                          {r.entity_type}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
+
 
       {/* Entity detail drill-down */}
       {selectedEntity && (

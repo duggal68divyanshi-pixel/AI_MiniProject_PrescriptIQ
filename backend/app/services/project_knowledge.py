@@ -21,6 +21,11 @@ async def get_project_knowledge(project_id: UUID, document_ids: list[UUID]) -> d
     limitations = await sci_repo.get_project_limitations(document_ids) or []
     claims = await sci_repo.get_project_claims(document_ids, claim_types=["finding", "contribution", "result"]) or []
     top_concepts = await sci_repo.get_project_top_concepts(document_ids) or []
+    try:
+        relationships = await sci_repo.get_project_relationships(document_ids)
+    except Exception:
+        relationships = []
+
 
     by_type: dict[str, list[dict]] = {}
     for e in entities:
@@ -51,6 +56,7 @@ async def get_project_knowledge(project_id: UUID, document_ids: list[UUID]) -> d
         "topics": topics or [],
         "common_limitations": common_limitations or [],
         "key_findings": claims[:15] if claims else [],
+        "top_relationships": relationships or [],
     }
 
 
