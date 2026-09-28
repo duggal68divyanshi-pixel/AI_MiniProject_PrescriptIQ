@@ -44,6 +44,15 @@ async def get_project_chat_history_endpoint(project_id: UUID):
     return await get_project_chat_history(project_id)
 
 
+@router.delete("/{project_id}/chat/history")
+async def clear_project_chat_history_endpoint(project_id: UUID):
+    from app.services.project_chat import clear_project_chat_history
+    await proj_repo.get_project(project_id)
+    success = await clear_project_chat_history(project_id)
+    return {"cleared": success}
+
+
+
 @router.post("/{project_id}/compare", response_model=ComparisonResponse)
 async def compare_papers(project_id: UUID, request: CompareRequest):
     await proj_repo.get_project(project_id)

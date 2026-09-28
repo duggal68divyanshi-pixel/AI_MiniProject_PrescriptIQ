@@ -496,6 +496,31 @@ async def get_relationships(document_id: UUID) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+async def get_project_relationships(document_ids: list[UUID], limit: int = 50) -> list[dict]:
+    if not document_ids:
+        return []
+    async with get_connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT pr.id, pr.document_id, d.filename, pr.predicate, pr.object_type,
+                   se.canonical_name AS entity_name, se.entity_type AS entity_type,
+                   sc.claim_text, pl.limitation_text, pr.object_text, pr.confidence
+            FROM paper_relationships pr
+            JOIN documents d ON d.id = pr.document_id
+            LEFT JOIN scientific_entities se ON se.id = pr.object_entity_id
+            LEFT JOIN scientific_claims sc ON sc.id = pr.object_claim_id
+            LEFT JOIN paper_limitations pl ON pl.id = pr.object_limitation_id
+            WHERE pr.document_id = ANY($1::uuid[])
+            ORDER BY pr.predicate, d.filename
+            LIMIT $2
+            """,
+            document_ids,
+            limit,
+        )
+    return [dict(r) for r in rows]
+
+
+
 # ---------------------------------------------------------------------
 # Processing jobs
 # ---------------------------------------------------------------------

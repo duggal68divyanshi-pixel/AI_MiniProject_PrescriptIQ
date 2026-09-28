@@ -26,7 +26,7 @@ logger = logging.getLogger("research_nexus.llm")
 
 class LLMProvider(abc.ABC):
     @abc.abstractmethod
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
+    def generate(self, system_prompt: str, user_prompt: str, max_tokens: int | None = None) -> str:
         """Return the model's plain-text completion."""
         raise NotImplementedError
 
@@ -43,11 +43,12 @@ class AnthropicProvider(LLMProvider):
         self._model = model
         self._max_tokens = max_tokens
 
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
+    def generate(self, system_prompt: str, user_prompt: str, max_tokens: int | None = None) -> str:
+        tokens = max_tokens or self._max_tokens
         try:
             response = self._client.messages.create(
                 model=self._model,
-                max_tokens=self._max_tokens,
+                max_tokens=tokens,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
@@ -74,11 +75,12 @@ class OpenAIProvider(LLMProvider):
         self._model = model
         self._max_tokens = max_tokens
 
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
+    def generate(self, system_prompt: str, user_prompt: str, max_tokens: int | None = None) -> str:
+        tokens = max_tokens or self._max_tokens
         try:
             response = self._client.chat.completions.create(
                 model=self._model,
-                max_tokens=self._max_tokens,
+                max_tokens=tokens,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -96,7 +98,7 @@ class MockProvider(LLMProvider):
     can never be mistaken for real LLM output from the user's actual papers.
     """
 
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
+    def generate(self, system_prompt: str, user_prompt: str, max_tokens: int | None = None) -> str:
         import json
         import re
         sys_lower = system_prompt.lower()

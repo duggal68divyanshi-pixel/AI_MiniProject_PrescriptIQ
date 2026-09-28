@@ -371,6 +371,7 @@ class ProjectTopicOut(BaseModel):
 class ProjectKnowledgeResponse(BaseModel):
     project_id: UUID
     paper_count: int
+    analyzed_count: int = 0
     top_models: list[dict]
     top_datasets: list[dict]
     top_methods: list[dict]
@@ -381,6 +382,8 @@ class ProjectKnowledgeResponse(BaseModel):
     topics: list[dict]
     common_limitations: list[dict]
     key_findings: list[dict]
+    top_relationships: list[dict] = []
+
 
 
 class EntityDetailResponse(BaseModel):

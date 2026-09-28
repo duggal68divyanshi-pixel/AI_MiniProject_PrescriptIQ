@@ -66,3 +66,40 @@ async def test_generate_manuscript_section(monkeypatch):
     assert res["section_type"] == "related_work"
     assert "Related Work" in res["content"]
     assert res["papers_analyzed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_manuscript_section_passes_max_tokens(monkeypatch):
+    project_id = uuid4()
+    doc_id = uuid4()
+
+    captured_kwargs = {}
+
+    class TrackingProvider:
+        def generate(self, system_prompt, user_prompt, max_tokens=None):
+            captured_kwargs["max_tokens"] = max_tokens
+            return "# Introduction\n\nDraft content..."
+
+    async def fake_get_project(p_id):
+        return {"id": p_id, "name": "Test Project"}
+
+    async def fake_get_indexed(p_id):
+        return [doc_id]
+
+    async def fake_build_matrix(p_id, ids, force_refresh=False):
+        return [], [], False
+
+    async def fake_get_knowledge(p_id, ids):
+        return {}
+
+    monkeypatch.setattr(authoring, "get_project", fake_get_project)
+    monkeypatch.setattr(authoring, "get_indexed_document_ids", fake_get_indexed)
+    monkeypatch.setattr(authoring, "build_literature_matrix", fake_build_matrix)
+    monkeypatch.setattr(authoring, "get_project_knowledge", fake_get_knowledge)
+    monkeypatch.setattr(authoring, "get_llm_provider", lambda: TrackingProvider())
+
+    res = await authoring.generate_manuscript_section(project_id, section_type="introduction")
+
+    assert captured_kwargs.get("max_tokens") == 4096
+    assert "Introduction" in res["content"]
+

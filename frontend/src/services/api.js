@@ -133,6 +133,14 @@ export async function getProjectChatHistory(projectId) {
   return handle(res);
 }
 
+export async function clearProjectChatHistory(projectId) {
+  const res = await fetch(`${BASE}/projects/${projectId}/chat/history`, {
+    method: "DELETE",
+  });
+  return handle(res);
+}
+
+
 export async function compareProjectPapers(projectId, documentIds) {
   const res = await fetch(`${BASE}/projects/${projectId}/compare`, {
     method: "POST",

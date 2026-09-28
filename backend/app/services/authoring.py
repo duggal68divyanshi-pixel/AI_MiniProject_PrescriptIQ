@@ -146,8 +146,12 @@ async def generate_manuscript_section(
 
     provider = get_llm_provider()
     try:
-        content = provider.generate(system_prompt, user_prompt)
+        try:
+            content = provider.generate(system_prompt, user_prompt, max_tokens=4096)
+        except TypeError:
+            content = provider.generate(system_prompt, user_prompt)
     except Exception as err:
+
         content = (
             f"# Draft Section: {section_type.replace('_', ' ').title()}\n\n"
             f"*(Generated from indexed literature context for {project['name']})*\n\n"
