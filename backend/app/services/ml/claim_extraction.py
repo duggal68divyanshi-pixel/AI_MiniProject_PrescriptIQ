@@ -64,8 +64,8 @@ _LIMITATION_CUE_WORDS = (
     "computational cost", "computationally expensive", "may not", "might not",
 )
 
-_CLAIM_SECTIONS = {"results", "discussion", "conclusion", "experiments"}
-_LIMITATION_SECTIONS = {"limitations", "future_work", "discussion", "conclusion"}
+_CLAIM_SECTIONS = {"results", "discussion", "conclusion", "experiments", "abstract", "other", "introduction", "background"}
+_LIMITATION_SECTIONS = {"limitations", "future_work", "discussion", "conclusion", "abstract", "other"}
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -144,44 +144,55 @@ def _call_llm_for_normalization(system_prompt: str, candidates: list[str], cap: 
     capped = candidates[:cap]
     provider = get_llm_provider()
     numbered = "\n".join(f"{i + 1}. {c}" for i, c in enumerate(capped))
-    raw = provider.generate(
-        system_prompt,
-        f"Candidate sentences:\n{numbered}\n\nNormalize them now, as a JSON array.",
-    )
-    match = _JSON_ARRAY_RE.search(raw)
-    if not match:
-        logger.warning("LLM normalization did not return a JSON array.")
-        return []
     try:
-        items = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        logger.warning("LLM normalization returned invalid JSON.")
-        return []
-    if not isinstance(items, list):
-        return []
+        raw = provider.generate(
+            system_prompt,
+            f"Candidate sentences:\n{numbered}\n\nNormalize them now, as a JSON array.",
+        )
+        match = _JSON_ARRAY_RE.search(raw)
+        if match:
+            items = json.loads(match.group(0))
+            if isinstance(items, list):
+                valid: list[dict] = []
+                for item in items:
+                    evidence = str(item.get("evidence_text") or "").strip()
+                    if not evidence:
+                        continue
+                    if any(evidence in c or c in evidence for c in capped):
+                        valid.append(item)
+                if valid:
+                    return valid
+    except Exception as exc:
+        logger.warning("LLM normalization call failed: %s", exc)
 
-    # Guardrail matching rule #1 above: drop any item whose evidence_text
-    # isn't (approximately) one of the actual candidates we sent, so the
-    # LLM cannot smuggle in an invented claim/limitation.
-    valid: list[dict] = []
-    for item in items:
-        evidence = str(item.get("evidence_text") or "").strip()
-        if not evidence:
-            continue
-        if any(evidence in c or c in evidence for c in capped):
-            valid.append(item)
-    return valid
+    return []
 
 
 def normalize_claims(candidates: list[str]) -> list[dict]:
     settings = get_settings()
-    return _call_llm_for_normalization(
+    items = _call_llm_for_normalization(
         _CLAIM_SYSTEM_PROMPT, candidates, settings.max_claim_candidates_per_document
     )
+    if not items and candidates:
+        for sentence in candidates[:settings.max_claim_candidates_per_document]:
+            items.append({
+                "claim_text": sentence,
+                "claim_type": "finding",
+                "evidence_text": sentence
+            })
+    return items
 
 
 def normalize_limitations(candidates: list[str]) -> list[dict]:
     settings = get_settings()
-    return _call_llm_for_normalization(
+    items = _call_llm_for_normalization(
         _LIMITATION_SYSTEM_PROMPT, candidates, settings.max_limitation_candidates_per_document
     )
+    if not items and candidates:
+        for sentence in candidates[:settings.max_limitation_candidates_per_document]:
+            items.append({
+                "limitation_text": sentence,
+                "category": "other",
+                "evidence_text": sentence
+            })
+    return items

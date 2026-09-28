@@ -218,6 +218,18 @@ class GapAnalysisResponse(BaseModel):
 
 # ---------- Phase 2: Research questions ----------
 
+class AuthoringRequest(BaseModel):
+    section_type: str = "related_work"  # abstract | introduction | related_work | methodology_comparison | research_gaps | conclusion
+    custom_instructions: str | None = None
+    force_refresh: bool = False
+
+
+class AuthoringResponse(BaseModel):
+    project_id: UUID
+    section_type: str
+    content: str
+    papers_analyzed: int
+
 class ResearchQuestionSet(BaseModel):
     gap_id: str
     gap: str
@@ -411,3 +423,39 @@ class HealthResponse(BaseModel):
     database: bool
     embedding_model: str
     llm_provider: str
+
+
+# ---------- Literature Discovery ----------
+
+class DiscoveredPaperItem(BaseModel):
+    paper_id: str
+    title: str
+    authors: list[str] = Field(default_factory=list)
+    abstract: str | None = None
+    publication_year: int | None = None
+    venue: str | None = None
+    doi: str | None = None
+    citation_count: int | None = None
+    source: str
+    paper_url: str | None = None
+    pdf_url: str | None = None
+
+
+class DiscoverySearchResponse(BaseModel):
+    query: str
+    source: str
+    total_results: int
+    papers: list[DiscoveredPaperItem]
+
+
+class ImportDiscoveredPaperRequest(BaseModel):
+    title: str
+    pdf_url: str | None = None
+    paper_url: str | None = None
+    authors: list[str] = Field(default_factory=list)
+    abstract: str | None = None
+    publication_year: int | None = None
+    venue: str | None = None
+    doi: str | None = None
+    source: str | None = None
+

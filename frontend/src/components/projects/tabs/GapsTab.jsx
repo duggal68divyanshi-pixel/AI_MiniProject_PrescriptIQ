@@ -50,6 +50,44 @@ export default function GapsTab({ projectId, indexedDocuments }) {
     }
   }
 
+  function exportMarkdownReport() {
+    if (!gaps || !gaps.gaps.length) return;
+    let md = "# Research Gap Analysis Report\n\n";
+    md += `*Analyzed ${gaps.papers_analyzed} paper(s)*\n\n`;
+    gaps.gaps.forEach((g, i) => {
+      md += `## Gap ${i + 1}: ${g.gap}\n\n`;
+      md += `- **Category**: ${CATEGORY_LABELS[g.category] || g.category}\n`;
+      md += `- **Evidence Strength**: ${g.evidence_strength}\n`;
+      md += `- **Affected Papers**: ${g.affected_papers.join(", ")}\n`;
+      if (g.why_it_matters) md += `- **Why It Matters**: ${g.why_it_matters}\n`;
+      if (g.potential_direction) md += `- **Potential Research Direction**: ${g.potential_direction}\n`;
+      if (g.evidence?.length) {
+        md += `- **Supporting Evidence Passages**:\n`;
+        g.evidence.forEach((e) => {
+          md += `  - ${e.document}${e.page != null ? ` (Page ${e.page})` : ""}\n`;
+        });
+      }
+      md += "\n";
+    });
+    if (questionSets?.length) {
+      md += "## Candidate Research Questions\n\n";
+      questionSets.forEach((qs) => {
+        md += `### Gap: ${qs.gap}\n`;
+        qs.questions.forEach((q, i) => {
+          md += `${i + 1}. ${q}\n`;
+        });
+        md += "\n";
+      });
+    }
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "research_gap_analysis.md";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const canAnalyze = indexedDocuments.length >= 2;
 
   return (
@@ -75,13 +113,21 @@ export default function GapsTab({ projectId, indexedDocuments }) {
           {loadingGaps ? "Analyzing…" : "Analyze Research Gaps"}
         </button>
         {gaps && (
-          <button
-            onClick={() => handleAnalyze(true)}
-            disabled={loadingGaps}
-            className="rounded-md border border-line px-4 py-2 text-sm text-ink hover:border-pine-400"
-          >
-            Re-run fresh
-          </button>
+          <>
+            <button
+              onClick={() => handleAnalyze(true)}
+              disabled={loadingGaps}
+              className="rounded-md border border-line px-4 py-2 text-sm text-ink hover:border-pine-400"
+            >
+              Re-run fresh
+            </button>
+            <button
+              onClick={exportMarkdownReport}
+              className="rounded-md border border-line bg-white px-3 py-2 text-sm text-pine-700 hover:border-pine-400 font-mono uppercase text-xs"
+            >
+              Export Report (.md)
+            </button>
+          </>
         )}
       </div>
 

@@ -13,12 +13,17 @@ in the migration to match.
 from __future__ import annotations
 
 import logging
+import os
 import threading
+
+os.environ["USE_TF"] = "0"
+os.environ["USE_TORCH"] = "1"
 
 from app.core.config import get_settings
 from app.core.exceptions import EmbeddingGenerationError
 
 logger = logging.getLogger("research_nexus.embeddings")
+
 
 _model = None
 _model_lock = threading.Lock()

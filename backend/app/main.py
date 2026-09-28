@@ -1,13 +1,27 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
+
+os.environ["USE_TF"] = "0"
+os.environ["USE_TORCH"] = "1"
+
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import chat, documents, health, intelligence, projects, research, search
+from app.api import (
+    chat,
+    discovery,
+    documents,
+    health,
+    intelligence,
+    projects,
+    research,
+    search,
+)
 from app.core.config import get_settings
 from app.core.database import close_pool, init_pool
 from app.core.exceptions import ResearchNexusError
@@ -15,6 +29,8 @@ from app.core.exceptions import ResearchNexusError
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger("research_nexus")
 
+
+import asyncio
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,8 +41,12 @@ async def lifespan(app: FastAPI):
             "Startup: could not connect to the database. Check DATABASE_URL "
             "in your .env file. The API will start but most endpoints will fail."
         )
-    yield
-    await close_pool()
+    try:
+        yield
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        pass
+    finally:
+        await close_pool()
 
 
 app = FastAPI(
@@ -62,6 +82,7 @@ async def unhandled_error_handler(request: Request, exc: Exception):
 
 
 app.include_router(documents.router)
+app.include_router(discovery.router)
 app.include_router(search.router)
 app.include_router(chat.router)
 app.include_router(health.router)
@@ -70,3 +91,15 @@ app.include_router(research.router)
 app.include_router(intelligence.document_router)
 app.include_router(intelligence.project_router)
 app.include_router(intelligence.system_router)
+
+
+@app.get("/", tags=["root"])
+async def root():
+    return {
+        "message": "Research Nexus — Research Intelligence Core API is running.",
+        "documentation": "/docs",
+        "health": "/api/health",
+        "frontend": "http://localhost:5173",
+    }
+
+

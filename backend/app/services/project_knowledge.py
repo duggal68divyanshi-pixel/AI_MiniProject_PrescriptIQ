@@ -16,17 +16,22 @@ from app.services import scientific_repository as sci_repo
 
 
 async def get_project_knowledge(project_id: UUID, document_ids: list[UUID]) -> dict:
-    entities = await sci_repo.get_project_entities(document_ids)
-    topics = await sci_repo.get_project_topics(project_id)
-    limitations = await sci_repo.get_project_limitations(document_ids)
-    claims = await sci_repo.get_project_claims(document_ids, claim_types=["finding", "contribution", "result"])
-    top_concepts = await sci_repo.get_project_top_concepts(document_ids)
+    entities = await sci_repo.get_project_entities(document_ids) or []
+    topics = await sci_repo.get_project_topics(project_id) or []
+    limitations = await sci_repo.get_project_limitations(document_ids) or []
+    claims = await sci_repo.get_project_claims(document_ids, claim_types=["finding", "contribution", "result"]) or []
+    top_concepts = await sci_repo.get_project_top_concepts(document_ids) or []
 
     by_type: dict[str, list[dict]] = {}
     for e in entities:
-        by_type.setdefault(e["entity_type"], []).append(e)
+        if isinstance(e, dict) and "entity_type" in e:
+            by_type.setdefault(e["entity_type"], []).append(e)
 
-    limitation_counter = Counter(lim["limitation_text"].strip().lower() for lim in limitations)
+    limitation_counter = Counter(
+        lim["limitation_text"].strip().lower()
+        for lim in limitations
+        if isinstance(lim, dict) and lim.get("limitation_text")
+    )
     common_limitations = [
         {"limitation": text, "paper_count": count}
         for text, count in limitation_counter.most_common(10)
@@ -42,10 +47,10 @@ async def get_project_knowledge(project_id: UUID, document_ids: list[UUID]) -> d
         "top_metrics": by_type.get("metric", [])[:10],
         "top_domains": by_type.get("domain", [])[:10],
         "top_tasks": by_type.get("task", [])[:10],
-        "top_concepts": top_concepts,
-        "topics": topics,
-        "common_limitations": common_limitations,
-        "key_findings": claims[:15],
+        "top_concepts": top_concepts or [],
+        "topics": topics or [],
+        "common_limitations": common_limitations or [],
+        "key_findings": claims[:15] if claims else [],
     }
 
 

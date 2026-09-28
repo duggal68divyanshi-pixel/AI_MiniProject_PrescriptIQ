@@ -69,11 +69,11 @@ export default function KnowledgeTab({ projectId, indexedDocuments }) {
     setError(null);
     try {
       await analyzeProject(projectId, true);
-      // Extraction runs in the background; give it a moment then refresh.
-      // The papers list / job status is authoritative — this is just a
-      // convenience re-fetch so newly-analyzed papers show up without a
-      // manual reload.
-      setTimeout(load, 4000);
+      // Scientific extraction runs asynchronously in background tasks.
+      // Poll multiple times to pick up progress as extractions complete.
+      setTimeout(load, 3000);
+      setTimeout(load, 8000);
+      setTimeout(load, 15000);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -101,13 +101,21 @@ export default function KnowledgeTab({ projectId, indexedDocuments }) {
     }
   }
 
-  const canAnalyze = indexedDocuments.length >= 1;
+  const canAnalyze = Array.isArray(indexedDocuments) && indexedDocuments.length >= 1;
   const hasKnowledge =
-    knowledge &&
-    (knowledge.top_models.length ||
-      knowledge.top_datasets.length ||
-      knowledge.top_methods.length ||
-      knowledge.top_metrics.length);
+    Boolean(knowledge) &&
+    Boolean(
+      (knowledge?.top_models?.length > 0) ||
+      (knowledge?.top_datasets?.length > 0) ||
+      (knowledge?.top_methods?.length > 0) ||
+      (knowledge?.top_metrics?.length > 0) ||
+      (knowledge?.top_domains?.length > 0) ||
+      (knowledge?.top_tasks?.length > 0) ||
+      (knowledge?.top_concepts?.length > 0) ||
+      (knowledge?.topics?.length > 0) ||
+      (knowledge?.common_limitations?.length > 0) ||
+      (knowledge?.key_findings?.length > 0)
+    );
 
   return (
     <div className="px-8 py-8">

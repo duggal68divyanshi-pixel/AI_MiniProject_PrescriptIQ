@@ -18,6 +18,7 @@ from app.models.schemas import DocumentStatus
 from app.services import document_repository as repo
 from app.services.chunker import chunk_document
 from app.services.embeddings import embed_texts
+from app.services import metadata_repository as meta_repo
 from app.services.metadata_extraction import extract_and_store_metadata
 from app.services.pdf_processor import extract_pdf
 
@@ -60,6 +61,7 @@ async def process_document(document_id: UUID, file_bytes: bytes, filename: str) 
         # document's own status — a paper is "indexed" regardless of
         # whether this succeeds, since retrieval/chat don't depend on it.
         try:
+            await meta_repo.upsert_pending(document_id)  # ensure row always exists
             await extract_and_store_metadata(document_id)
         except Exception:
             logger.exception("Metadata extraction step raised unexpectedly for %s", document_id)

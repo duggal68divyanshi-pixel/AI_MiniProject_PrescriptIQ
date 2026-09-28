@@ -7,6 +7,8 @@ from fastapi import APIRouter
 from app.core.exceptions import AnalysisFailedError, InsufficientPapersError
 from app.models.schemas import (
     AnalyticsResponse,
+    AuthoringRequest,
+    AuthoringResponse,
     CompareRequest,
     ComparisonResponse,
     GapAnalysisRequest,
@@ -17,6 +19,7 @@ from app.models.schemas import (
     ResearchQuestionsRequest,
     ResearchQuestionsResponse,
 )
+from app.services import document_repository as doc_repo
 from app.services import project_repository as proj_repo
 from app.services.analytics import get_project_analytics
 from app.services.comparison import compare_documents
@@ -32,6 +35,13 @@ router = APIRouter(prefix="/api/projects", tags=["research"])
 async def project_chat(project_id: UUID, request: ProjectChatRequest):
     await proj_repo.get_project(project_id)
     return await answer_project_question(project_id, request.question, top_k=request.top_k)
+
+
+@router.get("/{project_id}/chat/history")
+async def get_project_chat_history_endpoint(project_id: UUID):
+    from app.services.project_chat import get_project_chat_history
+    await proj_repo.get_project(project_id)
+    return await get_project_chat_history(project_id)
 
 
 @router.post("/{project_id}/compare", response_model=ComparisonResponse)
@@ -113,3 +123,102 @@ async def project_analytics(project_id: UUID):
     await proj_repo.get_project(project_id)
     indexed_ids = await proj_repo.get_indexed_document_ids(project_id)
     return await get_project_analytics(project_id, indexed_ids)
+
+
+@router.get("/{project_id}/export/bibtex")
+async def export_project_bibtex(project_id: UUID):
+    from fastapi.responses import PlainTextResponse
+    from app.services.citations import generate_bibtex
+    from app.services.metadata_repository import get_metadata_for_documents
+
+    project = await proj_repo.get_project(project_id)
+    docs = await doc_repo.list_documents(project_id=project_id)
+    indexed_ids = [d["id"] for d in docs if d["status"] == "indexed"]
+    metadata_map = await get_metadata_for_documents(indexed_ids)
+
+    entries = []
+    for d in docs:
+        if d["status"] != "indexed":
+            continue
+        meta = metadata_map.get(d["id"]) or {}
+        paper_dict = {
+            "title": meta.get("title") or d.get("title") or d.get("filename"),
+            "authors": meta.get("authors") or [],
+            "publication_year": meta.get("publication_year"),
+            "venue": meta.get("venue"),
+            "doi": meta.get("doi"),
+        }
+        entries.append(generate_bibtex(paper_dict))
+
+    content = "\n\n".join(entries) if entries else "% No indexed papers in project."
+    filename = f"{project['name'].lower().replace(' ', '_')}_bibliography.bib"
+    return PlainTextResponse(
+        content,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{project_id}/export/ris")
+async def export_project_ris(project_id: UUID):
+    from fastapi.responses import PlainTextResponse
+    from app.services.citations import generate_ris
+    from app.services.metadata_repository import get_metadata_for_documents
+
+    project = await proj_repo.get_project(project_id)
+    docs = await doc_repo.list_documents(project_id=project_id)
+    indexed_ids = [d["id"] for d in docs if d["status"] == "indexed"]
+    metadata_map = await get_metadata_for_documents(indexed_ids)
+
+    entries = []
+    for d in docs:
+        if d["status"] != "indexed":
+            continue
+        meta = metadata_map.get(d["id"]) or {}
+        paper_dict = {
+            "title": meta.get("title") or d.get("title") or d.get("filename"),
+            "authors": meta.get("authors") or [],
+            "publication_year": meta.get("publication_year"),
+            "venue": meta.get("venue"),
+            "doi": meta.get("doi"),
+            "abstract": meta.get("abstract"),
+        }
+        entries.append(generate_ris(paper_dict))
+
+    content = "\n\n".join(entries) if entries else "TY  - JOUR\nTI  - Empty\nER  - "
+    filename = f"{project['name'].lower().replace(' ', '_')}_bibliography.ris"
+    return PlainTextResponse(
+        content,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{project_id}/authoring/{section_type}", response_model=AuthoringResponse | None)
+async def get_saved_authoring_section_endpoint(project_id: UUID, section_type: str):
+    from app.services.authoring import get_saved_manuscript_section
+    await proj_repo.get_project(project_id)
+    res = await get_saved_manuscript_section(project_id, section_type=section_type)
+    if res is None:
+        return None
+    return AuthoringResponse(**res)
+
+
+@router.post("/{project_id}/authoring/generate", response_model=AuthoringResponse)
+async def generate_authoring_section(project_id: UUID, request: AuthoringRequest):
+    from app.services.authoring import generate_manuscript_section
+
+    await proj_repo.get_project(project_id)
+    indexed_ids = await proj_repo.get_indexed_document_ids(project_id)
+    if not indexed_ids:
+        raise InsufficientPapersError(
+            "Paper authoring assistance requires at least 1 indexed paper in this project."
+        )
+    try:
+        res = await generate_manuscript_section(
+            project_id,
+            section_type=request.section_type,
+            custom_instructions=request.custom_instructions,
+            force_refresh=request.force_refresh,
+        )
+        return AuthoringResponse(**res)
+    except Exception as exc:
+        raise AnalysisFailedError(f"Manuscript section drafting failed: {exc}") from exc

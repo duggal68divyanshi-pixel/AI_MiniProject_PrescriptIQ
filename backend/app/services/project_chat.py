@@ -45,6 +45,52 @@ def _build_context_block(chunks) -> str:
     return "\n\n".join(parts)
 
 
+import json
+from app.core.database import get_connection
+
+async def save_chat_message(project_id: UUID, question: str, answer: str, sources: list[dict]):
+    try:
+        async with get_connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO project_chat_history (project_id, question, answer, sources)
+                VALUES ($1, $2, $3, $4::jsonb)
+                """,
+                project_id, question, answer, json.dumps(sources, default=str)
+            )
+    except Exception as exc:
+        logger.warning("Failed to auto-save project chat history: %s", exc)
+
+
+async def get_project_chat_history(project_id: UUID) -> list[dict]:
+    try:
+        async with get_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT question, answer, sources, created_at
+                FROM project_chat_history
+                WHERE project_id = $1
+                ORDER BY created_at ASC
+                """,
+                project_id
+            )
+            res = []
+            for r in rows:
+                s_data = r["sources"]
+                if isinstance(s_data, str):
+                    s_data = json.loads(s_data)
+                res.append({
+                    "question": r["question"],
+                    "answer": r["answer"],
+                    "sources": s_data or [],
+                    "created_at": r["created_at"].isoformat() if r["created_at"] else ""
+                })
+            return res
+    except Exception as exc:
+        logger.warning("Failed to fetch project chat history: %s", exc)
+        return []
+
+
 async def answer_project_question(
     project_id: UUID,
     question: str,
@@ -55,7 +101,7 @@ async def answer_project_question(
     relevant = [c for c in chunks if c.similarity >= settings.similarity_threshold]
 
     if not relevant:
-        return ProjectChatResponse(
+        resp = ProjectChatResponse(
             question=question,
             answer=(
                 "I couldn't find any relevant content across this project's indexed "
@@ -66,6 +112,8 @@ async def answer_project_question(
             papers_cited=[],
             grounded=False,
         )
+        await save_chat_message(project_id, question, resp.answer, [])
+        return resp
 
     context_block = _build_context_block(relevant)
     user_prompt = (
@@ -76,7 +124,14 @@ async def answer_project_question(
     )
 
     provider = get_llm_provider()
-    answer_text = provider.generate(SYSTEM_PROMPT, user_prompt)
+    try:
+        answer_text = provider.generate(SYSTEM_PROMPT, user_prompt)
+    except Exception as err:
+        logger.warning("LLM provider generate failed in project chat: %s", err)
+        answer_text = (
+            f"**Retrieved Evidence from Project Literature**:\n\n{context_block}\n\n"
+            "*(Note: LLM synthesis unavailable; displaying direct literature citations above.)*"
+        )
 
     sources = [
         SourceReference(
@@ -91,10 +146,12 @@ async def answer_project_question(
     ]
     papers_cited = sorted({c.document_filename for c in relevant})
 
-    return ProjectChatResponse(
+    resp = ProjectChatResponse(
         question=question,
         answer=answer_text,
         sources=sources,
         papers_cited=papers_cited,
         grounded=True,
     )
+    await save_chat_message(project_id, question, answer_text, [s.model_dump() for s in sources])
+    return resp

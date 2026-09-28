@@ -1,5 +1,11 @@
 import { useRef, useState } from "react";
-import { uploadPaperToProject, removePaperFromProject } from "../../../services/api.js";
+import {
+  uploadPaperToProject,
+  removePaperFromProject,
+  getDocumentCitation,
+  getProjectBibtexUrl,
+  getProjectRisUrl,
+} from "../../../services/api.js";
 import StatusTrack from "../../StatusTrack.jsx";
 
 export default function PapersTab({ projectId, documents, onChanged }) {
@@ -7,6 +13,11 @@ export default function PapersTab({ projectId, documents, onChanged }) {
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState([]);
   const [dragOver, setDragOver] = useState(false);
+  const [activeCiteDoc, setActiveCiteDoc] = useState(null);
+  const [citations, setCitations] = useState(null);
+  const [citationFormat, setCitationFormat] = useState("apa");
+  const [copied, setCopied] = useState(false);
+  const [loadingCitations, setLoadingCitations] = useState(false);
 
   async function handleFiles(fileList) {
     const files = Array.from(fileList || []).filter((f) => f.name.toLowerCase().endsWith(".pdf"));
@@ -16,10 +27,6 @@ export default function PapersTab({ projectId, documents, onChanged }) {
     const failures = [];
     for (const file of files) {
       try {
-        // Sequential on purpose: each call kicks off a background pipeline
-        // job server-side, so this just needs to register all of them —
-        // parallelizing the HTTP calls wouldn't meaningfully speed up
-        // extraction/embedding, which happens in the background anyway.
         await uploadPaperToProject(projectId, file);
       } catch (err) {
         failures.push(`${file.name}: ${err.message}`);
@@ -36,8 +43,54 @@ export default function PapersTab({ projectId, documents, onChanged }) {
     onChanged?.();
   }
 
+  async function handleOpenCite(doc) {
+    setActiveCiteDoc(doc);
+    setLoadingCitations(true);
+    setCopied(false);
+    try {
+      const data = await getDocumentCitation(doc.id);
+      setCitations(data);
+    } catch {
+      setCitations(null);
+    } finally {
+      setLoadingCitations(false);
+    }
+  }
+
+  function handleCopy() {
+    if (!citations || !citations[citationFormat]) return;
+    navigator.clipboard.writeText(citations[citationFormat]);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  const indexedCount = documents.filter((d) => d.status === "indexed").length;
+
   return (
     <div className="mx-auto max-w-3xl px-8 py-8">
+      {/* Top action bar */}
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="font-display text-lg text-ink font-semibold">Project Papers</h2>
+        {indexedCount > 0 && (
+          <div className="flex gap-2">
+            <a
+              href={getProjectBibtexUrl(projectId)}
+              download
+              className="rounded border border-line bg-white px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-pine-700 hover:border-pine-400"
+            >
+              Export .bib
+            </a>
+            <a
+              href={getProjectRisUrl(projectId)}
+              download
+              className="rounded border border-line bg-white px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-pine-700 hover:border-pine-400"
+            >
+              Export .ris
+            </a>
+          </div>
+        )}
+      </div>
+
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -85,7 +138,7 @@ export default function PapersTab({ projectId, documents, onChanged }) {
             key={doc.id}
             className="flex items-center justify-between gap-4 rounded-md border border-line bg-white px-4 py-3"
           >
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate font-body text-sm font-medium text-ink">
                 {doc.metadata?.title || doc.title || doc.filename}
               </p>
@@ -97,15 +150,88 @@ export default function PapersTab({ projectId, documents, onChanged }) {
                 <p className="mt-1 text-[11px] text-red-700">{doc.error_message}</p>
               )}
             </div>
-            <button
-              onClick={() => handleRemove(doc.id)}
-              className="shrink-0 font-mono text-[11px] uppercase text-muted hover:text-red-700"
-            >
-              Remove
-            </button>
+            <div className="flex items-center gap-3 shrink-0">
+              {doc.status === "indexed" && (
+                <button
+                  onClick={() => handleOpenCite(doc)}
+                  className="font-mono text-[11px] uppercase text-pine-700 hover:underline"
+                >
+                  Cite
+                </button>
+              )}
+              <button
+                onClick={() => handleRemove(doc.id)}
+                className="font-mono text-[11px] uppercase text-muted hover:text-red-700"
+              >
+                Remove
+              </button>
+            </div>
           </div>
         ))}
       </div>
+
+      {/* Citation Modal */}
+      {activeCiteDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-lg border border-line bg-white p-6 shadow-lg">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-display text-base font-semibold text-ink">Citation Formats</h3>
+                <p className="mt-0.5 text-xs text-muted truncate max-w-md">
+                  {activeCiteDoc.metadata?.title || activeCiteDoc.title || activeCiteDoc.filename}
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveCiteDoc(null)}
+                className="text-muted hover:text-ink text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {loadingCitations ? (
+              <p className="py-8 text-center font-mono text-xs uppercase tracking-wide text-muted">
+                Generating citations…
+              </p>
+            ) : citations ? (
+              <div className="mt-4 space-y-4">
+                <div className="flex flex-wrap gap-1 border-b border-line pb-2">
+                  {["apa", "ieee", "mla", "chicago", "bibtex", "ris"].map((fmt) => (
+                    <button
+                      key={fmt}
+                      onClick={() => setCitationFormat(fmt)}
+                      className={`rounded px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider ${
+                        citationFormat === fmt
+                          ? "bg-pine-600 text-white"
+                          : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                      }`}
+                    >
+                      {fmt}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="rounded border border-line bg-stone-50 p-3">
+                  <pre className="whitespace-pre-wrap font-mono text-xs text-stone-800 leading-relaxed">
+                    {citations[citationFormat]}
+                  </pre>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={handleCopy}
+                    className="rounded bg-pine-600 px-4 py-1.5 font-mono text-xs uppercase text-white hover:bg-pine-700"
+                  >
+                    {copied ? "✓ Copied!" : "Copy Citation"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="py-4 text-xs text-red-700">Failed to generate citation for this paper.</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

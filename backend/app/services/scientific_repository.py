@@ -77,6 +77,9 @@ async def replace_paper_entities(document_id: UUID, mentions: list[dict]) -> Non
     """
     async with get_connection() as conn:
         async with conn.transaction():
+            chunk_rows = await conn.fetch("SELECT id FROM document_chunks WHERE document_id = $1", document_id)
+            valid_chunk_ids = {r["id"] for r in chunk_rows}
+
             await conn.execute("DELETE FROM paper_entities WHERE document_id = $1", document_id)
             for m in mentions:
                 entity_row = await conn.fetchrow(
@@ -89,6 +92,9 @@ async def replace_paper_entities(document_id: UUID, mentions: list[dict]) -> Non
                     m["entity_type"],
                     m["canonical_name"],
                 )
+                raw_chunk_id = m.get("chunk_id")
+                chunk_id = raw_chunk_id if raw_chunk_id in valid_chunk_ids else None
+
                 await conn.execute(
                     """
                     INSERT INTO paper_entities
@@ -98,7 +104,7 @@ async def replace_paper_entities(document_id: UUID, mentions: list[dict]) -> Non
                     """,
                     document_id,
                     entity_row["id"],
-                    m.get("chunk_id"),
+                    chunk_id,
                     m.get("section_label"),
                     m.get("page_number"),
                     m["mention_text"],
@@ -331,8 +337,13 @@ async def get_paper_topics(document_id: UUID) -> list[dict]:
 async def replace_claims(document_id: UUID, claims: list[dict]) -> None:
     async with get_connection() as conn:
         async with conn.transaction():
+            chunk_rows = await conn.fetch("SELECT id FROM document_chunks WHERE document_id = $1", document_id)
+            valid_chunk_ids = {r["id"] for r in chunk_rows}
+
             await conn.execute("DELETE FROM scientific_claims WHERE document_id = $1", document_id)
             for c in claims:
+                raw_chunk_id = c.get("chunk_id")
+                chunk_id = raw_chunk_id if raw_chunk_id in valid_chunk_ids else None
                 await conn.execute(
                     """
                     INSERT INTO scientific_claims
@@ -344,7 +355,7 @@ async def replace_claims(document_id: UUID, claims: list[dict]) -> None:
                     c["claim_type"],
                     c["claim_text"],
                     c["evidence_text"],
-                    c.get("chunk_id"),
+                    chunk_id,
                     c.get("section_label"),
                     c.get("page_number"),
                 )
@@ -361,8 +372,13 @@ async def get_claims(document_id: UUID) -> list[dict]:
 async def replace_limitations(document_id: UUID, limitations: list[dict]) -> None:
     async with get_connection() as conn:
         async with conn.transaction():
+            chunk_rows = await conn.fetch("SELECT id FROM document_chunks WHERE document_id = $1", document_id)
+            valid_chunk_ids = {r["id"] for r in chunk_rows}
+
             await conn.execute("DELETE FROM paper_limitations WHERE document_id = $1", document_id)
             for lim in limitations:
+                raw_chunk_id = lim.get("chunk_id")
+                chunk_id = raw_chunk_id if raw_chunk_id in valid_chunk_ids else None
                 await conn.execute(
                     """
                     INSERT INTO paper_limitations
@@ -374,7 +390,7 @@ async def replace_limitations(document_id: UUID, limitations: list[dict]) -> Non
                     lim["limitation_text"],
                     lim.get("category", "other"),
                     lim["evidence_text"],
-                    lim.get("chunk_id"),
+                    chunk_id,
                     lim.get("section_label"),
                     lim.get("page_number"),
                 )

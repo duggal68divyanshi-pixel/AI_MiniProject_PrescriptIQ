@@ -95,7 +95,7 @@ export default function CompareTab({ projectId, indexedDocuments }) {
                   <td className="px-4 py-3 font-medium text-ink">{dim.dimension}</td>
                   {result.documents.map((doc) => (
                     <td key={doc.id} className="px-4 py-3 text-ink">
-                      {dim.values[doc.id]}
+                      {dim.values[String(doc.id)] ?? "Not reported in the indexed text"}
                     </td>
                   ))}
                 </tr>

@@ -128,6 +128,11 @@ export async function askProjectQuestion(projectId, question, topK = 8) {
   return handle(res);
 }
 
+export async function getProjectChatHistory(projectId) {
+  const res = await fetch(`${BASE}/projects/${projectId}/chat/history`);
+  return handle(res);
+}
+
 export async function compareProjectPapers(projectId, documentIds) {
   const res = await fetch(`${BASE}/projects/${projectId}/compare`, {
     method: "POST",
@@ -227,3 +232,53 @@ export async function getMlInfo() {
   const res = await fetch(`${BASE}/system/ml-info`);
   return handle(res);
 }
+
+export async function searchLiterature(query, source = "all", limit = 10) {
+  const params = new URLSearchParams({ query, source, limit: String(limit) });
+  const res = await fetch(`${BASE}/discovery/search?${params.toString()}`);
+  return handle(res);
+}
+
+export async function importDiscoveredPaper(projectId, paper) {
+  const url = projectId
+    ? `${BASE}/projects/${projectId}/discovery/import`
+    : `${BASE}/documents/discovery/import`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(paper),
+  });
+  return handle(res);
+}
+
+export async function getDocumentCitation(documentId) {
+  const res = await fetch(`${BASE}/documents/${documentId}/citation`);
+  return handle(res);
+}
+
+export function getProjectBibtexUrl(projectId) {
+  return `${BASE}/projects/${projectId}/export/bibtex`;
+}
+
+export function getProjectRisUrl(projectId) {
+  return `${BASE}/projects/${projectId}/export/ris`;
+}
+
+export async function getAuthoringSection(projectId, sectionType) {
+  const res = await fetch(`${BASE}/projects/${projectId}/authoring/${sectionType}`);
+  return handle(res);
+}
+
+export async function generateAuthoringSection(projectId, sectionType, customInstructions, forceRefresh = false) {
+  const res = await fetch(`${BASE}/projects/${projectId}/authoring/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      section_type: sectionType,
+      custom_instructions: customInstructions || null,
+      force_refresh: forceRefresh,
+    }),
+  });
+  return handle(res);
+}
+
