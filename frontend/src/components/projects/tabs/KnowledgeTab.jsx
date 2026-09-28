@@ -117,13 +117,48 @@ export default function KnowledgeTab({ projectId, indexedDocuments }) {
       (knowledge?.key_findings?.length > 0)
     );
 
+  const totalIndexed = Array.isArray(indexedDocuments) ? indexedDocuments.length : 0;
+  const analyzedCount = knowledge?.analyzed_count ?? 0;
+  const hasUnanalyzedPapers = totalIndexed > 0 && analyzedCount < totalIndexed;
+
   return (
     <div className="px-8 py-8">
-      <p className="font-display text-xl text-ink">Project Knowledge & Knowledge Explorer</p>
-      <p className="mt-1 text-sm text-muted">
-        Scientific structure, entities, topics, and findings extracted from every indexed paper —
-        each item traces back to the paper and page it came from.
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-display text-xl text-ink">Project Knowledge &amp; Knowledge Explorer</p>
+          <p className="mt-1 text-sm text-muted">
+            Scientific structure, entities, topics, and findings extracted from every indexed paper —
+            each item traces back to the paper and page it came from.
+          </p>
+        </div>
+        {totalIndexed > 0 && knowledge && (
+          <span
+            className={`shrink-0 rounded-full px-3 py-1 font-mono text-xs font-medium ${
+              analyzedCount === totalIndexed
+                ? "bg-pine-100 text-pine-800"
+                : "bg-amber-100 text-amber-800"
+            }`}
+          >
+            {analyzedCount} / {totalIndexed} analyzed
+          </span>
+        )}
+      </div>
+
+      {hasUnanalyzedPapers && !analyzing && (
+        <div className="mt-4 flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
+          <span className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true">⚠</span>
+          <div>
+            <p className="text-sm font-medium text-amber-900">
+              {analyzedCount === 0
+                ? `${totalIndexed} indexed paper${totalIndexed === 1 ? "" : "s"} ready — run AI Analysis to extract scientific entities, topics, and keyphrases.`
+                : `${totalIndexed - analyzedCount} new paper${totalIndexed - analyzedCount === 1 ? "" : "s"} indexed since last analysis — run AI Analysis to update.`}
+            </p>
+            <p className="mt-0.5 text-xs text-amber-700">
+              Click "Analyze All Papers" below to start extraction.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mt-5 flex gap-2">
         <button

@@ -91,6 +91,22 @@ async def get_project_chat_history(project_id: UUID) -> list[dict]:
         return []
 
 
+async def clear_project_chat_history(project_id: UUID) -> bool:
+    try:
+        async with get_connection() as conn:
+            await conn.execute(
+                """
+                DELETE FROM project_chat_history
+                WHERE project_id = $1
+                """,
+                project_id,
+            )
+            return True
+    except Exception as exc:
+        logger.warning("Failed to clear project chat history: %s", exc)
+        return False
+
+
 async def answer_project_question(
     project_id: UUID,
     question: str,
@@ -116,8 +132,25 @@ async def answer_project_question(
         return resp
 
     context_block = _build_context_block(relevant)
+
+    # Multi-turn memory: include recent conversation turns (up to 5)
+    history_turns = await get_project_chat_history(project_id)
+    history_block = ""
+    if history_turns:
+        recent = history_turns[-5:]
+        formatted_history = []
+        for turn in recent:
+            q = turn.get("question", "").strip()
+            a = turn.get("answer", "").strip()
+            if q and a:
+                short_a = (a[:400] + "…") if len(a) > 400 else a
+                formatted_history.append(f"User: {q}\nAssistant: {short_a}")
+        if formatted_history:
+            history_block = "Recent Conversation History:\n" + "\n\n".join(formatted_history) + "\n\n"
+
     user_prompt = (
         f"Evidence retrieved from the project's papers:\n\n{context_block}\n\n"
+        f"{history_block}"
         f"Question: {question}\n\n"
         "Answer using only the evidence above, citing sources as [Source N] and "
         "naming which paper(s) support each claim."

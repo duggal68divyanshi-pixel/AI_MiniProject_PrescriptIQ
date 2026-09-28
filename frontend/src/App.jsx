@@ -111,6 +111,7 @@ export default function App() {
             {searchOpen && (
               <SearchPanel
                 selectedDocument={selectedDocument}
+                documents={documents}
                 onClose={() => setSearchOpen(false)}
               />
             )}

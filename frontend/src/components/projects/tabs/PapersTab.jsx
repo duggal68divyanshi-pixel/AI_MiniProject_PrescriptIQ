@@ -19,26 +19,50 @@ export default function PapersTab({ projectId, documents, onChanged }) {
   const [copied, setCopied] = useState(false);
   const [loadingCitations, setLoadingCitations] = useState(false);
 
+  const [uploadProgress, setUploadProgress] = useState(null); // { current: number, total: number }
+  const [skippedNonPdf, setSkippedNonPdf] = useState(0);
+
   async function handleFiles(fileList) {
-    const files = Array.from(fileList || []).filter((f) => f.name.toLowerCase().endsWith(".pdf"));
-    if (files.length === 0) return;
+    const rawFiles = Array.from(fileList || []);
+    const pdfFiles = rawFiles.filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+    const nonPdfs = rawFiles.length - pdfFiles.length;
+    setSkippedNonPdf(nonPdfs);
+
+    if (pdfFiles.length === 0) return;
+
     setUploading(true);
     setErrors([]);
+    setUploadProgress({ current: 0, total: pdfFiles.length });
+
+    let completed = 0;
     const failures = [];
-    for (const file of files) {
+
+    // Upload files concurrently using Promise.allSettled
+    const uploadPromises = pdfFiles.map(async (file) => {
       try {
         await uploadPaperToProject(projectId, file);
       } catch (err) {
         failures.push(`${file.name}: ${err.message}`);
+      } finally {
+        completed += 1;
+        setUploadProgress({ current: completed, total: pdfFiles.length });
       }
-    }
+    });
+
+    await Promise.allSettled(uploadPromises);
+
     setErrors(failures);
     setUploading(false);
+    setUploadProgress(null);
     if (inputRef.current) inputRef.current.value = "";
     onChanged?.();
   }
 
-  async function handleRemove(documentId) {
+  async function handleRemove(documentId, filename) {
+    const displayName = filename || "this paper";
+    if (!window.confirm(`Remove "${displayName}" from this project? This cannot be undone.`)) {
+      return;
+    }
     await removePaperFromProject(projectId, documentId);
     onChanged?.();
   }
@@ -65,6 +89,10 @@ export default function PapersTab({ projectId, documents, onChanged }) {
   }
 
   const indexedCount = documents.filter((d) => d.status === "indexed").length;
+  const processingCount = documents.filter((d) =>
+    ["uploaded", "extracting", "chunking", "embedding"].includes(d.status)
+  ).length;
+  const failedCount = documents.filter((d) => d.status === "failed").length;
 
   return (
     <div className="mx-auto max-w-3xl px-8 py-8">
@@ -115,11 +143,44 @@ export default function PapersTab({ projectId, documents, onChanged }) {
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
         />
-        <p className="font-mono text-xs uppercase tracking-wide text-pine-700">
-          {uploading ? "Uploading…" : "Drop multiple PDFs, or click to browse"}
+        <p className="font-mono text-xs uppercase tracking-wide text-pine-700 font-medium">
+          {uploading
+            ? `Uploading ${uploadProgress ? `${uploadProgress.current} of ${uploadProgress.total} papers…` : "…"}`
+            : "Drop multiple PDFs, or click to browse"}
         </p>
-        <p className="mt-1 text-xs text-muted">Each paper is extracted, chunked, embedded, and indexed independently.</p>
+        <p className="mt-1 text-xs text-muted">
+          Each paper is extracted, chunked, embedded, and indexed independently in parallel.
+        </p>
+
+        {uploading && uploadProgress && (
+          <div className="mt-3 max-w-xs mx-auto">
+            <div className="h-1.5 w-full bg-stone-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-pine-600 transition-all duration-300"
+                style={{
+                  width: `${Math.round((uploadProgress.current / uploadProgress.total) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className="mt-1 text-[11px] font-mono text-muted">
+              {Math.round((uploadProgress.current / uploadProgress.total) * 100)}% complete
+            </p>
+          </div>
+        )}
       </div>
+
+      {skippedNonPdf > 0 && (
+        <div className="mt-2.5 rounded-md border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs text-amber-800 flex items-center justify-between">
+          <span>⚠️ {skippedNonPdf} non-PDF file(s) skipped — only PDF documents are supported.</span>
+          <button
+            onClick={() => setSkippedNonPdf(0)}
+            className="text-amber-900 font-bold ml-2 text-xs"
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {errors.length > 0 && (
         <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2">
@@ -129,14 +190,37 @@ export default function PapersTab({ projectId, documents, onChanged }) {
         </div>
       )}
 
-      <div className="mt-6 flex flex-col gap-2">
+      {/* Paper Count Summary Bar */}
+      {documents.length > 0 && (
+        <div className="mt-5 flex flex-wrap items-center gap-2 rounded-md bg-stone-50 border border-line px-4 py-2 text-xs">
+          <span className="font-mono uppercase tracking-wider text-muted font-semibold">Summary:</span>
+          <span className="font-medium text-pine-800 bg-pine-100/70 px-2 py-0.5 rounded-full">
+            {indexedCount} Indexed
+          </span>
+          {processingCount > 0 && (
+            <span className="font-medium text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded-full animate-pulse">
+              {processingCount} Processing
+            </span>
+          )}
+          {failedCount > 0 && (
+            <span className="font-medium text-red-800 bg-red-100/70 px-2 py-0.5 rounded-full">
+              {failedCount} Failed
+            </span>
+          )}
+          <span className="text-muted ml-auto font-mono text-[11px]">
+            {documents.length} Total Paper{documents.length === 1 ? "" : "s"}
+          </span>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-col gap-2">
         {documents.length === 0 && (
           <p className="text-sm text-muted">No papers in this project yet.</p>
         )}
         {documents.map((doc) => (
           <div
             key={doc.id}
-            className="flex items-center justify-between gap-4 rounded-md border border-line bg-white px-4 py-3"
+            className="flex items-center justify-between gap-4 rounded-md border border-line bg-white px-4 py-3 shadow-sm hover:border-pine-200 transition-colors"
           >
             <div className="min-w-0 flex-1">
               <p className="truncate font-body text-sm font-medium text-ink">
@@ -160,8 +244,8 @@ export default function PapersTab({ projectId, documents, onChanged }) {
                 </button>
               )}
               <button
-                onClick={() => handleRemove(doc.id)}
-                className="font-mono text-[11px] uppercase text-muted hover:text-red-700"
+                onClick={() => handleRemove(doc.id, doc.metadata?.title || doc.title || doc.filename)}
+                className="font-mono text-[11px] uppercase text-muted hover:text-red-700 transition-colors"
               >
                 Remove
               </button>
@@ -169,6 +253,7 @@ export default function PapersTab({ projectId, documents, onChanged }) {
           </div>
         ))}
       </div>
+
 
       {/* Citation Modal */}
       {activeCiteDoc && (

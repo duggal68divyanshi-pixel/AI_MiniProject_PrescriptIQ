@@ -170,7 +170,12 @@ async def get_project_knowledge_view(project_id: UUID):
     await proj_repo.get_project(project_id)
     indexed_ids = await proj_repo.get_indexed_document_ids(project_id)
     knowledge = await get_project_knowledge(project_id, indexed_ids)
-    return ProjectKnowledgeResponse(**knowledge)
+    # Count how many indexed papers have already been through AI Analysis
+    analyzed_count = 0
+    for doc_id in indexed_ids:
+        if await sci_repo.has_intelligence(doc_id):
+            analyzed_count += 1
+    return ProjectKnowledgeResponse(**knowledge, analyzed_count=analyzed_count)
 
 
 @project_router.get("/{project_id}/entities", response_model=list[ProjectEntitySummary])

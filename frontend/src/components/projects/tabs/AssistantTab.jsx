@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { askProjectQuestion, getProjectChatHistory } from "../../../services/api.js";
+import { useState, useEffect, useRef } from "react";
+import { askProjectQuestion, getProjectChatHistory, clearProjectChatHistory } from "../../../services/api.js";
 import SourceReferences from "../../SourceReferences.jsx";
 
 // Lightweight inline markdown renderer — no external dependency needed.
@@ -75,6 +75,20 @@ export default function AssistantTab({ projectId, indexedDocuments }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [asking, setAsking] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  const starterQuestions = [
+    "What are the main methodologies used across these papers?",
+    "Which datasets appear most frequently?",
+    "What are the shared limitations across these studies?",
+    "How do the reported performance results compare across papers?",
+    "What open research questions or next steps are highlighted?",
+  ];
+
+  // Auto-scroll to latest message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, asking]);
 
   useEffect(() => {
     let active = true;
@@ -104,9 +118,8 @@ export default function AssistantTab({ projectId, indexedDocuments }) {
     return () => { active = false; };
   }, [projectId]);
 
-  async function handleAsk(e) {
-    e.preventDefault();
-    const question = input.trim();
+  async function submitQuestion(questionText) {
+    const question = questionText.trim();
     if (!question || asking) return;
 
     setInput("");
@@ -132,11 +145,48 @@ export default function AssistantTab({ projectId, indexedDocuments }) {
     }
   }
 
+  async function handleAsk(e) {
+    e?.preventDefault();
+    await submitQuestion(input);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleAsk(e);
+    }
+  }
+
+  async function handleClearHistory() {
+    if (!window.confirm("Clear all conversation history for this project?")) return;
+    try {
+      await clearProjectChatHistory(projectId);
+    } catch (err) {
+      console.warn("Could not delete chat history on server:", err);
+    }
+    setMessages([]);
+  }
+
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 px-8 py-6">
+      {/* Top Header bar with Clear option */}
+      {messages.length > 0 && (
+        <div className="flex items-center justify-between border-b border-line bg-paper/50 px-8 py-2">
+          <span className="font-mono text-xs text-muted">
+            {messages.filter((m) => m.role === "user").length} conversation turn(s)
+          </span>
+          <button
+            onClick={handleClearHistory}
+            className="font-mono text-xs text-stone-500 hover:text-red-700 transition-colors uppercase tracking-wider"
+          >
+            Clear Conversation
+          </button>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto px-8 py-6">
         {messages.length === 0 && (
-          <div className="mx-auto max-w-xl pt-10 text-center">
+          <div className="mx-auto max-w-xl pt-6 text-center">
             <p className="font-display text-xl text-ink">Ask anything about the papers in this project</p>
             <p className="mt-2 text-sm text-muted">
               {indexedDocuments.length > 0
@@ -145,6 +195,25 @@ export default function AssistantTab({ projectId, indexedDocuments }) {
                   }.`
                 : "Upload and index papers first, then ask a cross-paper question here."}
             </p>
+
+            {indexedDocuments.length > 0 && (
+              <div className="mt-8 text-left">
+                <p className="font-mono text-[11px] uppercase tracking-wider text-muted mb-2 text-center">
+                  Suggested Starter Questions
+                </p>
+                <div className="flex flex-col gap-2">
+                  {starterQuestions.map((q, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => submitQuestion(q)}
+                      className="rounded-lg border border-line bg-white px-4 py-2.5 text-left text-xs font-medium text-pine-800 transition hover:border-pine-400 hover:bg-pine-50/50 shadow-sm"
+                    >
+                      💡 {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -152,12 +221,12 @@ export default function AssistantTab({ projectId, indexedDocuments }) {
           {messages.map((m, i) => (
             <div key={i} className={m.role === "user" ? "self-end" : "self-start"}>
               {m.role === "user" && (
-                <div className="max-w-md rounded-lg bg-pine-600 px-4 py-2.5 text-sm text-paper">
+                <div className="max-w-md rounded-lg bg-pine-600 px-4 py-2.5 text-sm text-paper whitespace-pre-wrap">
                   {m.text}
                 </div>
               )}
               {m.role === "assistant" && (
-                <div className="max-w-xl rounded-lg border border-line bg-white px-4 py-3">
+                <div className="max-w-xl rounded-lg border border-line bg-white px-4 py-3 shadow-sm">
                   <div className="leading-relaxed">{renderMarkdown(m.text)}</div>
                   {!m.grounded && (
                     <p className="mt-2 font-mono text-[11px] uppercase tracking-wide text-muted">
@@ -180,25 +249,28 @@ export default function AssistantTab({ projectId, indexedDocuments }) {
             </div>
           ))}
           {asking && (
-            <div className="self-start rounded-lg border border-line bg-white px-4 py-3 text-sm text-muted">
+            <div className="self-start rounded-lg border border-line bg-white px-4 py-3 text-sm text-muted animate-pulse">
               Retrieving relevant passages across papers and synthesizing an answer…
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
       </div>
 
-      <form onSubmit={handleAsk} className="border-t border-line bg-paper px-8 py-4">
-        <div className="mx-auto flex max-w-2xl items-center gap-2">
-          <input
+      <form onSubmit={handleAsk} className="border-t border-line bg-paper px-8 py-3">
+        <div className="mx-auto flex max-w-2xl items-end gap-2">
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="e.g. Which methodologies are commonly used across these papers?"
-            className="flex-1 rounded-md border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none placeholder:text-muted focus:border-pine-400"
+            onKeyDown={handleKeyDown}
+            rows={2}
+            placeholder="Ask a question across these papers... (Press Enter to send, Shift+Enter for newline)"
+            className="flex-1 resize-none rounded-md border border-line bg-white px-3 py-2 text-sm text-ink outline-none placeholder:text-muted focus:border-pine-400 leading-normal"
           />
           <button
             type="submit"
             disabled={asking || !input.trim()}
-            className="rounded-md bg-pine-600 px-4 py-2.5 text-sm font-medium text-paper transition-colors hover:bg-pine-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-pine-600 px-5 py-2.5 text-sm font-medium text-paper transition-colors hover:bg-pine-700 disabled:cursor-not-allowed disabled:opacity-50 shrink-0 h-[42px]"
           >
             Ask
           </button>
@@ -207,3 +279,4 @@ export default function AssistantTab({ projectId, indexedDocuments }) {
     </div>
   );
 }
+
