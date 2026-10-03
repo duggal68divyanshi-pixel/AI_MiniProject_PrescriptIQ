@@ -833,9 +833,104 @@ GET  /api/system/ml-info                       — live model registry status
   a graph database) exactly as scoped for this phase.
 - As with Phase 1/2, no authentication/multi-tenancy.
 
-## 22. Next development phase
+## 22. Phase 4 — Visual Research Knowledge Graph
 
-Beyond Phase 2, the longer-term Research Nexus plan adds: Supabase Auth +
+Phase 4 adds an interactive, dynamically generated visual knowledge graph
+that maps entities, topics, models, datasets, research gaps, and findings
+extracted from all indexed project papers onto a zoomable canvas.
+
+```
+Research Papers (indexed by Phase 3)
+  → KnowledgeGraphService
+      → Typed Nodes (topic / entity / model / dataset / gap / finding)
+      → Typed Edges (proposes / evaluates_on / related_to / contradicts / extends)
+  → React Flow Canvas (interactive, draggable, zoomable)
+      → Natural-language Graph Query (LLM-grounded over graph topology)
+      → Node Detail Panel (metadata: methods, models, datasets, paper count)
+```
+
+### 22.1 Backend: KnowledgeGraphService
+
+`backend/app/services/knowledge_graph.py` builds the entire graph payload
+from live database data — no mock data, no hard-coded nodes:
+
+- Aggregates scientific entities, topics, claims, gaps, and findings from
+  `scientific_entities`, `paper_entities`, `paper_relationships`, and
+  `paper_metadata` tables.
+- Assigns React Flow compatible `{x, y}` positions using a deterministic
+  spiral layout seeded by entity type.
+- Returns an enriched node payload: methods, models, datasets, paper_count,
+  confidence, and description per node.
+- Returns typed edges with `predicate`, `source_label`, `target_label`,
+  `description`, and `confidence` per edge.
+
+### 22.2 New API endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/projects/{id}/knowledge-graph` | Full graph payload (nodes, edges, stats) |
+| POST | `/api/projects/{id}/knowledge-graph/query` | LLM-grounded natural-language graph query |
+
+The graph query endpoint injects the full topology (entity list, edge list,
+model/dataset/gap counts) into the LLM system prompt, enabling accurate
+answers to relational questions like *"Which models are used in papers that
+address dataset bias?"*.
+
+### 22.3 Frontend: VisualKnowledgeGraph
+
+`frontend/src/components/projects/tabs/VisualKnowledgeGraph.jsx` provides:
+
+- **React Flow canvas** with drag, zoom, pan, and minimap controls.
+- **Custom node types** (6): Topic (violet), Entity (blue), Model (green),
+  Dataset (orange), Gap (rose), Finding (emerald) — each with distinct
+  border, background, and icon styling.
+- **Animated edges** with predicate labels (e.g. `proposes`, `evaluates_on`).
+- **Node detail panel**: click any node to see its type, description,
+  paper count, and aggregated methods/models/datasets.
+- **Graph statistics panel**: live counts of nodes and edges by type.
+- **Legend panel**: floating color key for node types.
+- **Toolbar**: Fit View, Zoom In/Out, Reset Layout buttons.
+- **Natural language query panel**: ask questions about the graph and get
+  LLM-grounded answers with context drawn from graph topology.
+- **Empty state handling**: clear message if no papers have been analyzed yet.
+- **Auto-refresh**: re-fetches graph after any analysis job completes.
+
+### 22.4 Dependency
+
+`@xyflow/react` v12 — installed as a frontend npm dependency. No backend
+dependencies added; the graph generation is pure Python using existing SQL
+queries via asyncpg.
+
+### 22.5 Demo procedure
+
+1. Open a project with 5–10 analyzed papers (run **Analyze All Papers**
+   in the Knowledge Explorer tab first).
+2. Click the **Knowledge Graph** tab in the project workspace.
+3. The canvas loads automatically with all entities, topics, models,
+   datasets, gaps, and findings as colored nodes.
+4. Drag nodes to rearrange the layout; scroll to zoom; click to pan.
+5. Click any node to open its detail panel on the right — read its
+   paper count, description, and associated methods/models.
+6. Type a question in the query panel, e.g.:
+   *"Which models are proposed in papers dealing with transformer architectures?"*
+7. Read the LLM-grounded answer that references actual graph topology.
+8. Use the **Fit View** button to re-center after dragging.
+
+### 22.6 Known limitations (Phase 4 additions)
+
+- Graph layout uses a deterministic spiral seeding, not a physics-based
+  force simulation — very dense graphs (200+ nodes) may require manual
+  node dragging for readability.
+- LLM-grounded graph queries are bounded by the graph topology snapshot
+  at query time; if new papers are analyzed after the graph is fetched,
+  refresh the tab to pick up new nodes.
+- No graph persistence — node positions reset on every page reload.
+- No citation-network edges (paper A cites paper B) in this phase; edges
+  represent semantic relationships between *entities*, not between papers.
+
+## 23. Next development phase
+
+Beyond Phase 4, the longer-term Research Nexus plan adds: Supabase Auth +
 per-user project isolation, Supabase Storage for raw PDFs, a Neo4j
 knowledge graph layer over extracted entities and citations, hybrid
 GraphRAG retrieval, full literature-review *document* generation (not just
