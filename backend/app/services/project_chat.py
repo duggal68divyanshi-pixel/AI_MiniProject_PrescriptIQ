@@ -148,11 +148,38 @@ async def answer_project_question(
         if formatted_history:
             history_block = "Recent Conversation History:\n" + "\n\n".join(formatted_history) + "\n\n"
 
+    # Graph-aware research context synthesis
+    graph_context_block = ""
+    try:
+        from collections import defaultdict
+        from app.services.knowledge_graph import build_project_knowledge_graph
+        graph_data = await build_project_knowledge_graph(project_id)
+        if graph_data and graph_data.get("nodes"):
+            g_by_type = defaultdict(list)
+            for gn in graph_data["nodes"]:
+                g_by_type[gn["type"]].append(gn["label"])
+            g_lines = []
+            if g_by_type.get("model"):
+                g_lines.append(f"- Models / Architectures: {', '.join(g_by_type['model'][:8])}")
+            if g_by_type.get("dataset"):
+                g_lines.append(f"- Benchmarks / Datasets: {', '.join(g_by_type['dataset'][:8])}")
+            if g_by_type.get("method"):
+                g_lines.append(f"- Methodologies / Techniques: {', '.join(g_by_type['method'][:8])}")
+            if g_by_type.get("topic"):
+                g_lines.append(f"- Research Topics: {', '.join(g_by_type['topic'][:6])}")
+            if g_by_type.get("gap"):
+                g_lines.append(f"- Open Research Gaps ({len(g_by_type['gap'])} identified): {', '.join(g_by_type['gap'][:4])}")
+            if g_lines:
+                graph_context_block = "Structured Project Knowledge Graph Context:\n" + "\n".join(g_lines) + "\n\n"
+    except Exception as exc:
+        logger.debug("Optional graph context injection omitted: %s", exc)
+
     user_prompt = (
+        f"{graph_context_block}"
         f"Evidence retrieved from the project's papers:\n\n{context_block}\n\n"
         f"{history_block}"
         f"Question: {question}\n\n"
-        "Answer using only the evidence above, citing sources as [Source N] and "
+        "Answer using only the evidence and knowledge graph context above, citing sources as [Source N] and "
         "naming which paper(s) support each claim."
     )
 
