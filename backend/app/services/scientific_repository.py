@@ -598,3 +598,52 @@ async def has_intelligence(document_id: UUID) -> bool:
             "SELECT 1 FROM paper_sections WHERE document_id = $1 LIMIT 1", document_id
         )
     return row is not None
+
+
+# ---------------------------------------------------------------------
+# Knowledge Graph support helpers
+# ---------------------------------------------------------------------
+
+async def get_paper_topic_assignments(document_ids: list[UUID]) -> list[dict]:
+    """Returns topic assignments enriched with topic labels, for the KG."""
+    if not document_ids:
+        return []
+    async with get_connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT pta.document_id, pta.topic_id, pta.probability, pt.label as topic_label
+            FROM paper_topic_assignments pta
+            JOIN project_topics pt ON pt.id = pta.topic_id
+            WHERE pta.document_id = ANY($1::uuid[])
+            """,
+            document_ids,
+        )
+    return [dict(r) for r in rows]
+
+
+async def get_project_research_questions(project_id: UUID) -> list[dict]:
+    """Returns all research question records for a project (for KG nodes)."""
+    async with get_connection() as conn:
+        rows = await conn.fetch(
+            "SELECT id, questions, created_at FROM research_questions WHERE project_id = $1 ORDER BY created_at DESC",
+            project_id
+        )
+    return [dict(r) for r in rows]
+
+
+async def get_project_keyphrases_top_n(document_ids: list[UUID], top_n: int = 5) -> list[dict]:
+    """Returns top-N keyphrases per document for KG concept edges."""
+    if not document_ids:
+        return []
+    async with get_connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT document_id, phrase, score, rank
+            FROM paper_keyphrases
+            WHERE document_id = ANY($1::uuid[]) AND rank <= $2
+            """,
+            document_ids,
+            top_n,
+        )
+    return [dict(r) for r in rows]
+
