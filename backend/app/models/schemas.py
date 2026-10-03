@@ -462,3 +462,42 @@ class ImportDiscoveredPaperRequest(BaseModel):
     doi: str | None = None
     source: str | None = None
 
+
+# ---------- Knowledge Graph ----------
+
+class GraphNodeOut(BaseModel):
+    id: str
+    type: str
+    label: str
+    data: dict
+    position: dict[str, float]
+
+
+class GraphEdgeOut(BaseModel):
+    id: str
+    source: str
+    target: str
+    label: str
+    predicate: str
+    data: dict = Field(default_factory=dict)
+
+
+class ProjectGraphResponse(BaseModel):
+    project_id: UUID
+    nodes: list[GraphNodeOut]
+    edges: list[GraphEdgeOut]
+    stats: dict
+
+
+class GraphQueryRequest(BaseModel):
+    question: str = Field(..., min_length=2, max_length=2000)
+    focused_node_ids: list[str] = Field(default_factory=list)
+
+
+class GraphQueryResponse(BaseModel):
+    question: str
+    answer: str
+    stats: dict | None = None
+    relevant_nodes: list[str] = Field(default_factory=list)
+
+
