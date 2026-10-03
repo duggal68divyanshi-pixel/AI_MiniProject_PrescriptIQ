@@ -24,6 +24,9 @@ from app.models.schemas import (
     RelationshipOut,
     SectionOut,
     TopicDetailResponse,
+    ProjectGraphResponse,
+    GraphQueryRequest,
+    GraphQueryResponse,
 )
 from app.services import document_repository as doc_repo
 from app.services import project_repository as proj_repo
@@ -31,6 +34,7 @@ from app.services import scientific_extraction
 from app.services import scientific_repository as sci_repo
 from app.services.ml.model_registry import get_model_registry
 from app.services.project_knowledge import get_project_knowledge
+from app.services.knowledge_graph import build_project_knowledge_graph, query_knowledge_graph
 
 logger = logging.getLogger("research_nexus.api.intelligence")
 
@@ -214,6 +218,19 @@ async def get_project_topic_detail(project_id: UUID, topic_id: UUID):
 @project_router.get("/{project_id}/jobs/{job_id}", response_model=ProcessingJobOut)
 async def get_project_job_status(project_id: UUID, job_id: UUID):
     return ProcessingJobOut(**await sci_repo.get_job(job_id))
+
+
+@project_router.get("/{project_id}/graph", response_model=ProjectGraphResponse)
+async def get_project_graph_endpoint(project_id: UUID):
+    await proj_repo.get_project(project_id)
+    return await build_project_knowledge_graph(project_id)
+
+
+@project_router.post("/{project_id}/graph/query", response_model=GraphQueryResponse)
+async def query_project_graph_endpoint(project_id: UUID, request: GraphQueryRequest):
+    await proj_repo.get_project(project_id)
+    return await query_knowledge_graph(project_id, request.question, focused_node_ids=request.focused_node_ids)
+
 
 
 # ---------------------------------------------------------------------
