@@ -10,6 +10,7 @@ import InsightsTab from "./tabs/InsightsTab.jsx";
 import OverviewTab from "./tabs/OverviewTab.jsx";
 import IntelligenceTab from "./tabs/IntelligenceTab.jsx";
 import KnowledgeTab from "./tabs/KnowledgeTab.jsx";
+import VisualKnowledgeGraph from "./tabs/VisualKnowledgeGraph.jsx";
 import AuthoringTab from "./tabs/AuthoringTab.jsx";
 
 const TABS = [
@@ -19,6 +20,7 @@ const TABS = [
   { id: "assistant", label: "Research Assistant" },
   { id: "intelligence", label: "Paper Intelligence" },
   { id: "knowledge", label: "Knowledge Explorer" },
+  { id: "graph", label: "🕸 Knowledge Graph" },
   { id: "matrix", label: "Literature Matrix" },
   { id: "compare", label: "Compare Papers" },
   { id: "gaps", label: "Research Gaps" },
@@ -197,6 +199,13 @@ export default function ProjectWorkspace({ projectId, onProjectChanged, onProjec
         )}
         {tab === "knowledge" && (
           <KnowledgeTab projectId={projectId} indexedDocuments={indexedDocuments} />
+        )}
+        {tab === "graph" && (
+          <VisualKnowledgeGraph
+            projectId={projectId}
+            indexedDocuments={indexedDocuments}
+            onNavigate={(t) => setTab(t)}
+          />
         )}
         {tab === "matrix" && (
           <MatrixTab projectId={projectId} indexedDocuments={indexedDocuments} />
