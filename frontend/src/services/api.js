@@ -290,3 +290,20 @@ export async function generateAuthoringSection(projectId, sectionType, customIns
   return handle(res);
 }
 
+// ---------- Visual Knowledge Graph ----------
+
+export async function getProjectGraph(projectId) {
+  const res = await fetch(`${BASE}/projects/${projectId}/graph`);
+  return handle(res);
+}
+
+export async function queryProjectGraph(projectId, question, focusedNodeIds = []) {
+  const res = await fetch(`${BASE}/projects/${projectId}/graph/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, focused_node_ids: focusedNodeIds }),
+  });
+  return handle(res);
+}
+
+
