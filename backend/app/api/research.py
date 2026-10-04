@@ -201,7 +201,10 @@ async def export_project_ris(project_id: UUID):
     )
 
 
-@router.get("/{project_id}/authoring/{section_type}", response_model=AuthoringResponse | None)
+from typing import Optional
+
+
+@router.get("/{project_id}/authoring/{section_type}", response_model=Optional[AuthoringResponse])
 async def get_saved_authoring_section_endpoint(project_id: UUID, section_type: str):
     from app.services.authoring import get_saved_manuscript_section
     await proj_repo.get_project(project_id)

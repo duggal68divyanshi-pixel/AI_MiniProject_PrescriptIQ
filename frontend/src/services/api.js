@@ -24,6 +24,45 @@ export async function uploadDocument(file) {
   return handle(res);
 }
 
+export async function uploadPaperPhotosBatch(files) {
+  const formData = new FormData();
+  for (const f of files) {
+    formData.append("files", f);
+  }
+  const res = await fetch(`${BASE}/documents/upload-photos`, {
+    method: "POST",
+    body: formData,
+  });
+  return handle(res);
+}
+
+export async function getDocumentPages(id) {
+  const res = await fetch(`${BASE}/documents/${id}/pages`);
+  return handle(res);
+}
+
+export function getDocumentPageImageUrl(id, pageNum) {
+  return `${BASE}/documents/${id}/pages/${pageNum}/image`;
+}
+
+export async function reprocessPageOcr(id, pageNum, engine = "auto") {
+  const res = await fetch(`${BASE}/documents/${id}/pages/${pageNum}/reprocess-ocr`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ engine }),
+  });
+  return handle(res);
+}
+
+export async function updatePageText(id, pageNum, text) {
+  const res = await fetch(`${BASE}/documents/${id}/pages/${pageNum}/text`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  return handle(res);
+}
+
 export async function listDocuments() {
   const res = await fetch(`${BASE}/documents`);
   return handle(res);
@@ -101,6 +140,18 @@ export async function uploadPaperToProject(projectId, file) {
   const formData = new FormData();
   formData.append("file", file);
   const res = await fetch(`${BASE}/projects/${projectId}/documents`, {
+    method: "POST",
+    body: formData,
+  });
+  return handle(res);
+}
+
+export async function uploadPaperPhotosToProject(projectId, files) {
+  const formData = new FormData();
+  for (const f of files) {
+    formData.append("files", f);
+  }
+  const res = await fetch(`${BASE}/projects/${projectId}/documents/upload-photos`, {
     method: "POST",
     body: formData,
   });

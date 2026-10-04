@@ -17,13 +17,55 @@ class DocumentStatus(str, Enum):
     FAILED = "failed"
 
 
-# ---------- Documents ----------
+class DocumentSourceType(str, Enum):
+    NATIVE_PDF = "native_pdf"
+    SCANNED_PDF = "scanned_pdf"
+    SINGLE_PHOTO = "single_photo"
+    MULTI_PHOTO = "multi_photo"
+
+
+# ---------- Documents & OCR ----------
+
+class DocumentPageOut(BaseModel):
+    id: UUID
+    document_id: UUID
+    page_number: int
+    image_path: str | None = None
+    extracted_text: str | None = None
+    ocr_engine: str | None = None
+    ocr_confidence: float | None = None
+    ocr_confidence_label: str = "OCR confidence unavailable"
+    ocr_status: str = "completed"
+    error_message: str | None = None
+    layout_blocks: list[dict] = Field(default_factory=list)
+    user_edited: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class PageTextUpdate(BaseModel):
+    text: str = Field(..., min_length=1)
+
+
+class OcrReprocessRequest(BaseModel):
+    engine: str = Field(default="auto", description="auto | tesseract | vision_llm")
+
+
+class OcrEvaluationResponse(BaseModel):
+    document_id: UUID
+    status: str
+    ground_truth_available: bool = False
+    character_error_rate: float | None = None
+    word_error_rate: float | None = None
+    message: str
+
 
 class DocumentOut(BaseModel):
     id: UUID
     filename: str
     title: str | None = None
     status: DocumentStatus
+    document_source_type: DocumentSourceType | str | None = DocumentSourceType.NATIVE_PDF
     page_count: int | None = None
     chunk_count: int | None = None
     error_message: str | None = None
@@ -113,12 +155,6 @@ class ProjectOut(BaseModel):
     updated_at: datetime
 
 
-class ProjectDocumentOut(DocumentOut):
-    """A document as seen within a project — adds extracted metadata when available."""
-
-    metadata: "PaperMetadataOut | None" = None
-
-
 # ---------- Phase 2: Paper metadata ----------
 
 class PaperMetadataOut(BaseModel):
@@ -130,6 +166,12 @@ class PaperMetadataOut(BaseModel):
     keywords: list[str] | None = None
     extraction_status: str
     extraction_error: str | None = None
+
+
+class ProjectDocumentOut(DocumentOut):
+    """A document as seen within a project — adds extracted metadata when available."""
+
+    metadata: PaperMetadataOut | None = None
 
 
 # ---------- Phase 2: Project-scoped chat / synthesis ----------

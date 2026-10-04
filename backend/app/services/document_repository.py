@@ -9,19 +9,23 @@ from app.models.schemas import DocumentStatus
 
 
 async def create_document(
-    filename: str, title: str | None, project_id: UUID | None = None
+    filename: str,
+    title: str | None,
+    project_id: UUID | None = None,
+    source_type: str = "native_pdf",
 ) -> UUID:
     async with get_connection() as conn:
         row = await conn.fetchrow(
             """
-            INSERT INTO documents (filename, title, status, project_id)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO documents (filename, title, status, project_id, document_source_type)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id
             """,
             filename,
             title,
             DocumentStatus.UPLOADED.value,
             project_id,
+            source_type,
         )
         return row["id"]
 
@@ -153,3 +157,90 @@ async def list_documents(project_id: UUID | None = None) -> list[dict]:
                 """
             )
     return [dict(r) for r in rows]
+
+
+async def upsert_document_page(
+    document_id: UUID,
+    page_number: int,
+    image_path: str | None,
+    extracted_text: str | None,
+    ocr_engine: str | None = None,
+    ocr_confidence: float | None = None,
+    ocr_status: str = "completed",
+    error_message: str | None = None,
+    layout_blocks: list | None = None,
+) -> None:
+    import json
+    async with get_connection() as conn:
+        await conn.execute(
+            """
+            INSERT INTO document_pages (
+                document_id, page_number, image_path, extracted_text,
+                ocr_engine, ocr_confidence, ocr_status, error_message, layout_blocks
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+            ON CONFLICT (document_id, page_number) DO UPDATE SET
+                image_path = EXCLUDED.image_path,
+                extracted_text = EXCLUDED.extracted_text,
+                ocr_engine = EXCLUDED.ocr_engine,
+                ocr_confidence = EXCLUDED.ocr_confidence,
+                ocr_status = EXCLUDED.ocr_status,
+                error_message = EXCLUDED.error_message,
+                layout_blocks = EXCLUDED.layout_blocks,
+                updated_at = now()
+            """,
+            document_id,
+            page_number,
+            image_path,
+            extracted_text,
+            ocr_engine,
+            ocr_confidence,
+            ocr_status,
+            error_message,
+            json.dumps(layout_blocks or []),
+        )
+
+
+async def get_document_pages(document_id: UUID) -> list[dict]:
+    async with get_connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT * FROM document_pages
+            WHERE document_id = $1
+            ORDER BY page_number ASC
+            """,
+            document_id,
+        )
+    return [dict(r) for r in rows]
+
+
+async def get_document_page(document_id: UUID, page_number: int) -> dict | None:
+    async with get_connection() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT * FROM document_pages
+            WHERE document_id = $1 AND page_number = $2
+            """,
+            document_id,
+            page_number,
+        )
+    return dict(row) if row else None
+
+
+async def update_page_text(
+    document_id: UUID, page_number: int, text: str, user_edited: bool = True
+) -> None:
+    async with get_connection() as conn:
+        await conn.execute(
+            """
+            UPDATE document_pages
+            SET extracted_text = $3,
+                user_edited = $4,
+                updated_at = now()
+            WHERE document_id = $1 AND page_number = $2
+            """,
+            document_id,
+            page_number,
+            text,
+            user_edited,
+        )
+

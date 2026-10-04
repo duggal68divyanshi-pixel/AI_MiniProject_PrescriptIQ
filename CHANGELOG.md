@@ -1,7 +1,19 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to Research Nexus are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Phase 5] — OCR & Paper Photo Ingestion Pipeline
+
+### Added
+- **`backend/app/services/ingestion_service.py`** — Common document ingestion abstraction for native PDFs, scanned PDFs, single paper photos, and multi-photo batches.
+- **`backend/app/services/ocr_preprocessor.py`** — Image resolution normalization, EXIF auto-rotation, grayscale conversion, CLAHE adaptive contrast enhancement, and deskewing.
+- **`backend/app/services/ocr_processor.py`** — Level 1 Local OCR (Tesseract / PyMuPDF), quality & confidence evaluation heuristics, Level 2 Vision-LLM fallback, and layout block extraction.
+- **`backend/app/services/vision_ocr_provider.py`** — Modular Vision-Language Model OCR provider interface supporting Anthropic Claude 3.5 Sonnet, OpenAI GPT-4o Vision, and Mock Vision provider.
+- **`supabase/migrations/0006_ocr_paper_photo_support.sql`** — Database migration creating `document_pages` table and adding `document_source_type` column to `documents`.
+- **`frontend/src/components/MultiPhotoUploadModal.jsx`** — Interactive multi-page paper photo batch reordering, preview, deletion, and upload modal.
+- **`frontend/src/components/OcrVerificationModal.jsx`** — Split-view OCR text inspection modal showing original page image vs. extracted text, OCR engine switcher, and text editor.
+- **`backend/tests/test_ocr_ingestion.py`** — Comprehensive pytest suite for OCR, image preprocessing, and photo ingestion.
 
 ---
 

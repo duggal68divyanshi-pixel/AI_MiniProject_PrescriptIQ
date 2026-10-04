@@ -65,14 +65,12 @@ async def upload_paper_to_project(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
 ):
-    # Validates the project exists before accepting the upload.
     await proj_repo.get_project(project_id)
-
     settings = get_settings()
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise InvalidFileTypeError(f"'{file.filename}' is not a PDF file.")
-    if file.content_type not in ("application/pdf", "application/x-pdf", None):
-        raise InvalidFileTypeError("Uploaded file is not a valid PDF (wrong content type).")
+    filename = file.filename or "paper.pdf"
+
+    from app.services.ingestion_service import is_image_filename
+    is_photo = is_image_filename(filename)
 
     file_bytes = await file.read()
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
@@ -81,17 +79,60 @@ async def upload_paper_to_project(
     if len(file_bytes) == 0:
         raise InvalidFileTypeError("Uploaded file is empty.")
 
+    source_type = "single_photo" if is_photo else "native_pdf"
     document_id = await doc_repo.create_document(
-        filename=file.filename, title=None, project_id=project_id
+        filename=filename, title=None, project_id=project_id, source_type=source_type
     )
     _stored_path(document_id).write_bytes(file_bytes)
-    background_tasks.add_task(process_document, document_id, file_bytes, file.filename)
+    background_tasks.add_task(process_document, document_id, file_bytes, filename, is_photo=is_photo)
 
     return DocumentUploadResponse(
         id=document_id,
-        filename=file.filename,
+        filename=filename,
         status="uploaded",
-        message="File received. Processing has started.",
+        message="Paper received. Processing has started.",
+    )
+
+
+@router.post("/{project_id}/documents/upload-photos", response_model=DocumentUploadResponse)
+async def upload_multi_photos_to_project(
+    project_id: UUID,
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+):
+    await proj_repo.get_project(project_id)
+    settings = get_settings()
+    if not files:
+        raise InvalidFileTypeError("No image files provided for batch upload.")
+
+    from app.services.ingestion_service import is_image_filename
+    photo_files: list[tuple[bytes, str]] = []
+    max_bytes = settings.max_upload_size_mb * 1024 * 1024
+
+    for f in files:
+        fname = f.filename or "paper_page.jpg"
+        if not is_image_filename(fname):
+            raise InvalidFileTypeError(f"'{fname}' is not a valid image format.")
+        b = await f.read()
+        if len(b) > max_bytes:
+            raise FileTooLargeError(f"File '{fname}' exceeds size limit.")
+        photo_files.append((b, fname))
+
+    first_filename = photo_files[0][1]
+    batch_filename = f"Batch Paper ({len(files)} pages) - {first_filename}"
+
+    document_id = await doc_repo.create_document(
+        filename=batch_filename, title=None, project_id=project_id, source_type="multi_photo"
+    )
+    background_tasks.add_task(
+        process_document, document_id, b"", batch_filename, is_photo=True, multi_photos=photo_files
+    )
+
+    return DocumentUploadResponse(
+        id=document_id,
+        filename=batch_filename,
+        status="uploaded",
+        message=f"{len(files)} paper page photos added to project. Multi-page OCR pipeline started.",
     )
 
 

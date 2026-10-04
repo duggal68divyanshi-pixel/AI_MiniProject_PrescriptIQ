@@ -3,6 +3,7 @@ Domain-level exceptions. Each maps to a specific HTTP status in main.py's
 exception handlers, so route code can raise a meaningful, typed error
 instead of leaking stack traces to the frontend.
 """
+from __future__ import annotations
 
 
 class ResearchNexusError(Exception):

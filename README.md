@@ -928,13 +928,52 @@ queries via asyncpg.
 - No citation-network edges (paper A cites paper B) in this phase; edges
   represent semantic relationships between *entities*, not between papers.
 
-## 23. Next development phase
+## 23. Phase 5 — OCR & Paper Photo Ingestion Pipeline
 
-Beyond Phase 4, the longer-term Research Nexus plan adds: Supabase Auth +
+Research Nexus includes a production-grade OCR and paper photo upload pipeline, allowing users to upload native PDFs, scanned/image-only PDFs, single paper photos (`.png`, `.jpg`, `.jpeg`, `.webp`), or multi-photo paper page batches.
+
+```text
+PDF / Photo Page(s)
+        │
+Document Type Detection
+        │
+Image Preprocessing (CLAHE, Deskew, Contrast)
+        │
+Level 1 Local OCR (Tesseract / PyMuPDF)
+        │
+Quality & Confidence Assessment
+        │
+Is Result Reliable?
+  ├── YES → Use OCR text + layout blocks
+  └── NO  → Level 2 Vision-LLM Fallback (Claude / GPT / Mock)
+        │
+Page Reconstruction (Preserve Page Numbers)
+        │
+Section Detection → Semantic Chunking → Embeddings → pgvector → RAG + Page Citations
+```
+
+### 23.1 Ingestion & OCR Features
+- **Unified Document Ingestion Abstraction** (`ingestion_service.py`): Handles native PDFs, scanned PDFs, single paper photos, and multi-photo page batches into standard page provenance records.
+- **Image Preprocessing** (`ocr_preprocessor.py`): Resolution normalization, EXIF auto-rotation, grayscale conversion, CLAHE adaptive contrast enhancement, sharpening, and deskewing.
+- **Dual-Level OCR Engine & Fallback** (`ocr_processor.py`):
+  - Level 1 Local OCR via PyMuPDF / Tesseract.
+  - Empirical confidence heuristic evaluation (dictionary token ratio, symbol density). Uncalculable scores are labeled `"OCR confidence unavailable"`.
+  - Level 2 Vision-LLM fallback (`vision_ocr_provider.py`) supporting Anthropic Claude 3.5 Sonnet, OpenAI GPT-4o Vision, and Mock provider.
+  - Layout block detection (`title`, `heading`, `paragraph`, `table`, `figure_caption`, `list`, `footer`, `header`).
+- **Multi-Photo Batch Upload Modal** (`MultiPhotoUploadModal.jsx`): Reorder paper page photos visually via drag/arrow controls, delete/add pages, and process as a unified paper.
+- **OCR Verification & Page Inspector Modal** (`OcrVerificationModal.jsx`): Split-view UI showing original page image vs extracted text, OCR engine switcher, "Reprocess OCR" button, and human text verification editor.
+- **Page-Level Citations**: Preserves original 1-indexed page numbers throughout the RAG vector search and citation system.
+
+---
+
+## 24. Next development phase
+
+Beyond Phase 5, the longer-term Research Nexus plan adds: Supabase Auth +
 per-user project isolation, Supabase Storage for raw PDFs, a Neo4j
 knowledge graph layer over extracted entities and citations, hybrid
 GraphRAG retrieval, full literature-review *document* generation (not just
 the matrix), trend-analysis dashboards over a larger paper corpus, and an
 AI-assisted scientific paper authoring system (Abstract through
 References, in IEEE/ACM/Springer formats).
+
 
