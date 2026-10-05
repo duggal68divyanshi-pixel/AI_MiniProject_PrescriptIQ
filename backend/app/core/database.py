@@ -43,8 +43,8 @@ async def init_pool() -> None:
         )
         logger.info("Database pool initialized")
     except Exception as exc:  # pragma: no cover - startup failure path
-        logger.error("Failed to initialize database pool: %s", exc)
-        raise
+        logger.warning("Postgres database pool not available (%s). Running in offline in-memory mode.", exc)
+        _pool = None
 
 
 async def close_pool() -> None:

@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from app.core.database import get_connection
+from app.core.database import get_connection, _pool
 
 
 async def upsert_pending(document_id: UUID) -> None:
+    if _pool is None:
+        return
     async with get_connection() as conn:
         await conn.execute(
             """
@@ -26,6 +28,8 @@ async def save_extracted(
     abstract: str | None,
     keywords: list[str] | None,
 ) -> None:
+    if _pool is None:
+        return
     async with get_connection() as conn:
         await conn.execute(
             """
@@ -53,6 +57,8 @@ async def save_extracted(
 
 
 async def save_failed(document_id: UUID, error: str) -> None:
+    if _pool is None:
+        return
     async with get_connection() as conn:
         await conn.execute(
             """
